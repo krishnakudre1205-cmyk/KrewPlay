@@ -1,0 +1,8 @@
+type ChatPanelProps = {
+  messages: ChatMessage[];
+  message: string;
+
+  onMessageChange: (value: string) => void;
+
+  onSend: () => void;
+};

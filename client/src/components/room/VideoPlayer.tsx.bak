@@ -1,0 +1,11 @@
+type VideoPlayerProps = {
+  videoRef: React.RefObject<HTMLVideoElement>;
+  roomId: string;
+  activity: string;
+  speed: number;
+
+  onPlay: () => void;
+  onPause: () => void;
+  onSeek: () => void;
+  onRateChange: () => void;
+};
