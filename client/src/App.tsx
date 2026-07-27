@@ -7,6 +7,7 @@ import Host from "./pages/Host/Host";
 import Join from "./pages/Join/Join";
 import Room from "./pages/Room/Room";
 import Login from "./pages/Login/Login";
+import Account from "./pages/Account/Account";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/join" element={<Join />} />
           <Route path="/room/:id" element={<Room />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/account" element={<Account />} />
         </Route>
       </Routes>
     </BrowserRouter>

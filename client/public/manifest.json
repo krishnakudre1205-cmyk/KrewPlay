@@ -1,0 +1,30 @@
+{
+  "short_name": "KrewPlay",
+  "name": "KrewPlay — Watch Movies Together",
+  "description": "Stream movies and watch together in real-time with KrewPlay.",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#0d0006",
+  "theme_color": "#0d0006",
+  "display": "standalone",
+  "orientation": "any",
+  "categories": ["entertainment", "video", "social"]
+}

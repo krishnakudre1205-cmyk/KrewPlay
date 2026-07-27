@@ -1,5 +1,31 @@
 import { randomUUID } from "crypto";
 import { Room, Participant } from "../types/room";
+import { saveHistory } from "../utils/db";
+import path from "path";
+
+async function recordHistory(
+  userId: string, 
+  movieName: string, 
+  moviePath: string, 
+  isHost: boolean, 
+  coWatchers: string[]
+) {
+  try {
+    const filename = path.basename(moviePath);
+    await saveHistory({
+      id: randomUUID(),
+      userId,
+      movieName,
+      filename,
+      watchedAt: new Date().toISOString(),
+      isHost,
+      coWatchers,
+    });
+    console.log(`History entry recorded: user=${userId}, movie=${movieName}, isHost=${isHost}`);
+  } catch (err) {
+    console.error("Error recording history:", err);
+  }
+}
 
 const rooms = new Map<string, Room>();
 
@@ -19,14 +45,17 @@ function generateRoomCode(): string {
   return code;
 }
 
-export function createRoom(hostName: string) {
+export function createRoom(hostName: string, userId?: string, avatar?: { emoji: string; gradient: string }) {
   const hostId = randomUUID();
 
   const participant: Participant = {
     id: hostId,
     name: hostName,
     isHost: true,
+    connected: true,
     joinedAt: new Date(),
+    userId,
+    avatar,
   };
 
   let roomCode: string;
@@ -66,7 +95,7 @@ export function getRoom(code: string) {
   return rooms.get(code);
 }
 
-export function joinRoom(code: string, name: string) {
+export function joinRoom(code: string, name: string, userId?: string, avatar?: { emoji: string; gradient: string }) {
   console.log("Trying to join:", code);
   console.log("Rooms in memory:", [...rooms.keys()]);
 
@@ -97,15 +126,30 @@ export function joinRoom(code: string, name: string) {
     id: randomUUID(),
     name,
     isHost: false,
+    connected: true,
     joinedAt: new Date(),
+    userId,
+    avatar,
   };
 
   room.participants.push(participant);
 
+  // If room already has a movie loaded, record this user's history
+  if (userId && room.movieName && room.moviePath) {
+    const coWatchers = room.participants
+      .filter((p) => p.userId !== userId && p.connected)
+      .map((p) => p.name);
+    recordHistory(userId, room.movieName, room.moviePath, false, coWatchers);
+  }
+
   return participant;
 }
 
-export function leaveRoom(code: string, participantId: string) {
+export function leaveRoom(
+  code: string,
+  participantId: string,
+  newHostId?: string
+) {
   const room = rooms.get(code);
 
   if (!room) {
@@ -114,27 +158,53 @@ export function leaveRoom(code: string, participantId: string) {
     };
   }
 
-  const participantIndex = room.participants.findIndex(
-    (participant) => participant.id === participantId
+  const participant = room.participants.find(
+    p => p.id === participantId
   );
 
-  if (participantIndex === -1) {
+  if (!participant) {
     return {
       error: "Participant not found",
     };
   }
 
-  const participant = room.participants[participantIndex];
-
+  // Host leaving
   if (participant.isHost) {
-    rooms.delete(code);
+
+    // No new host selected
+    if (!newHostId) {
+      return {
+        error: "Host must select a new host",
+      };
+    }
+
+    const nextHost = room.participants.find(
+      p =>
+        p.id === newHostId &&
+        p.connected &&
+        p.id !== participantId
+    );
+
+    if (!nextHost) {
+      return {
+        error: "Invalid new host",
+      };
+    }
+
+    nextHost.isHost = true;
+    room.hostId = nextHost.id;
+
+    participant.isHost = false;
+    participant.connected = false;
 
     return {
-      roomDeleted: true,
+      success: true,
+      hostTransferred: true,
+      newHost: nextHost,
     };
   }
 
-  room.participants.splice(participantIndex, 1);
+  participant.connected = false;
 
   return {
     success: true,

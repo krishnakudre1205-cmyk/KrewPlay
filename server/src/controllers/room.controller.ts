@@ -7,7 +7,7 @@ import {
 } from "../services/room.service";
 
 export function createRoomController(req: Request, res: Response) {
-  const { hostName } = req.body;
+  const { hostName, userId, avatar } = req.body;
 
   if (!hostName) {
     return res.status(400).json({
@@ -15,13 +15,13 @@ export function createRoomController(req: Request, res: Response) {
     });
   }
 
-  const room = createRoom(hostName);
+  const room = createRoom(hostName, userId, avatar);
 
   res.status(201).json(room);
 }
 
 export function getRoomController(req: Request, res: Response) {
-  const room = getRoom(req.params.code);
+  const room = getRoom(req.params.code as string);
 
   if (!room) {
     return res.status(404).json({
@@ -34,7 +34,7 @@ export function getRoomController(req: Request, res: Response) {
 
 export function joinRoomController(req: Request, res: Response) {
   const { code } = req.params;
-  const { name } = req.body;
+  const { name, userId, avatar } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({
@@ -42,7 +42,7 @@ export function joinRoomController(req: Request, res: Response) {
     });
   }
 
-  const result = joinRoom(code, name);
+  const result = joinRoom(code as string, name as string, userId as string, avatar);
 
   if (!result) {
     return res.status(404).json({
@@ -64,7 +64,10 @@ export function joinRoomController(req: Request, res: Response) {
 
 export function leaveRoomController(req: Request, res: Response) {
   const { code } = req.params;
-  const { participantId } = req.body;
+  const {
+    participantId,
+    newHostId,
+} = req.body;
 
   if (!participantId) {
     return res.status(400).json({
@@ -72,7 +75,11 @@ export function leaveRoomController(req: Request, res: Response) {
     });
   }
 
-  const result = leaveRoom(code, participantId);
+  const result = leaveRoom(
+    code as string,
+    participantId as string,
+    newHostId as string
+  );
 
   if ("error" in result) {
     return res.status(404).json({
@@ -81,11 +88,15 @@ export function leaveRoomController(req: Request, res: Response) {
   }
 
   if ("roomDeleted" in result) {
-    return res.status(200).json({
-      success: true,
-      message: "Host left. Room deleted.",
-    });
-  }
+  return res.status(200).json({
+    success: true,
+    roomDeleted: true,
+  });
+}
+
+if ("hostTransferred" in result) {
+  return res.status(200).json(result);
+}
 
   return res.status(200).json({
     success: true,

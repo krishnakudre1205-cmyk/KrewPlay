@@ -1,5 +1,41 @@
 @import "tailwindcss";
 
+@theme {
+  --color-burgundy-950: #0d0107;
+  --color-burgundy-900: #1c020f;
+  --color-burgundy-800: #2d0418;
+  --color-burgundy-700: #3f0521;
+  --color-burgundy-600: #52092d;
+
+  --color-maroon-950: #1f0107;
+  --color-maroon-900: #3c0411;
+  --color-maroon-800: #5c0d29;
+  --color-maroon-700: #800c35;
+  --color-maroon-600: #a6184a;
+  --color-maroon-500: #c92c63;
+
+  --color-lavender-50: #faf7ff;
+  --color-lavender-100: #f3efff;
+  --color-lavender-200: #e2d7ff;
+  --color-lavender-300: #c8b5ff;
+  --color-lavender-400: #b89eff;
+  --color-lavender-500: #8e66ff;
+  --color-lavender-600: #7147e0;
+  --color-lavender-700: #572dc2;
+  
+  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-glow: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 0 10px rgba(184, 158, 255, 0.1), 0 0 20px rgba(184, 158, 255, 0.05);
+  }
+  to {
+    box-shadow: 0 0 20px rgba(184, 158, 255, 0.4), 0 0 30px rgba(138, 21, 56, 0.2);
+  }
+}
+
 html,
 body,
 #root {
@@ -10,11 +46,82 @@ body,
 }
 
 body {
-  background: #0f172a;
-  color: white;
-  font-family: Inter, sans-serif;
+  background: #0d0107;
+  color: #faf7ff;
+  font-family: 'Outfit', 'Inter', sans-serif;
+  overflow-x: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+:fullscreen {
+  margin: 0;
+  padding: 0;
+}
+
+:fullscreen video {
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(-250px) scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Custom Webkit Scrollbars for premium appearance */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d0107;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2d0418;
+  border-radius: 9999px;
+  border: 2px solid #0d0107;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52092d;
+}
+
+/* Custom Text Selection */
+::selection {
+  background: #800c35;
+  color: #faf7ff;
+}
+
+/* Custom animations for premium feel */
+@keyframes ambientGlow {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.2);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.8);
+  }
+}
+
+.ambient-blur-1 {
+  animation: ambientGlow 20s infinite alternate;
+}
+
+.ambient-blur-2 {
+  animation: ambientGlow 25s infinite alternate-reverse;
 }

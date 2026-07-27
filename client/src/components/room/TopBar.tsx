@@ -1,42 +1,63 @@
-import { Copy, LogOut } from "lucide-react";
+import { useState } from "react";
+import { Copy, Check, LogOut } from "lucide-react";
 
 type Props = {
   roomCode: string;
+  onLeave: () => void;
 };
 
-export default function TopBar({ roomCode }: Props) {
-  function copyRoomCode() {
-    navigator.clipboard.writeText(roomCode);
-    alert("Room code copied!");
+export default function TopBar({ roomCode, onLeave }: Props) {
+  const [copied, setCopied] = useState(false);
+
+  function copyRoomUrl() {
+    const roomUrl = window.location.href;
+
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(roomUrl)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        })
+        .catch(() => {
+          window.prompt("Copy the room URL:", roomUrl);
+        });
+      return;
+    }
+
+    window.prompt("Copy the room URL:", roomUrl);
   }
 
   return (
-    <div className="flex items-center justify-between bg-[#1A1A1A] border border-[#343434] rounded-xl p-4 mb-6">
-      <h1 className="text-3xl font-bold text-white">
-        🎬 KK Cine
-      </h1>
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-burgundy-900/20 border border-burgundy-900/40 rounded-2xl p-4 md:px-6 mb-6 backdrop-blur-sm shadow-xl">
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        {/* Room badge */}
+        <div className="rounded-xl bg-burgundy-950/80 border border-burgundy-900/60 px-4 py-2 text-sm font-semibold">
+          <span className="text-lavender-300/60 font-light mr-1.5">Room:</span>
+          <span className="text-lavender-200 font-black tracking-wider uppercase">{roomCode}</span>
+        </div>
 
-      <div className="flex items-center gap-3">
-
-        <span className="text-[#B497FF] font-semibold">
-          Room : {roomCode}
-        </span>
-
+        {/* Copy url */}
         <button
-          onClick={copyRoomCode}
-          className="bg-[#8A1538] hover:bg-[#6D1124] px-4 py-2 rounded-lg text-white flex items-center gap-2 transition"
+          onClick={copyRoomUrl}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold tracking-wide border transition-all duration-300 cursor-pointer ${
+            copied
+              ? "bg-emerald-950/20 border-emerald-500/40 text-emerald-400"
+              : "bg-maroon-800/40 text-lavender-200 border-maroon-700/30 hover:bg-maroon-700 hover:text-white hover:shadow-lg hover:shadow-maroon-900/20"
+          }`}
         >
-          <Copy size={18} />
-          Copy
+          {copied ? <Check size={16} /> : <Copy size={16} />}
+          <span>{copied ? "Copied" : "Copy URL"}</span>
         </button>
 
+        {/* Leave */}
         <button
-          className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-white flex items-center gap-2 transition"
+          onClick={onLeave}
+          className="flex items-center gap-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 hover:text-red-300 border border-red-900/30 hover:border-red-500/30 px-4 py-2.5 rounded-xl text-sm font-semibold tracking-wide transition-all duration-300 cursor-pointer"
         >
-          <LogOut size={18} />
-          Leave
+          <LogOut size={16} />
+          Leave Party
         </button>
-
       </div>
     </div>
   );

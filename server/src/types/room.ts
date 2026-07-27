@@ -2,7 +2,13 @@ export interface Participant {
   id: string;
   name: string;
   isHost: boolean;
+  connected: boolean;
   joinedAt: Date;
+  userId?: string;
+  avatar?: {
+    emoji: string;
+    gradient: string;
+  };
 }
 
 export interface PlayerState {
@@ -18,6 +24,7 @@ export interface Room {
 
   // Movie
   moviePath?: string;
+  movieUrl?: string;
   movieName?: string;
   movieSize?: number;
   mimeType?: string;
@@ -29,6 +36,11 @@ export interface Room {
 
   // Shared Player State
   player: PlayerState;
+
+  // Audio & Subtitles Info
+  audioTracks?: { index: number; language?: string; title?: string; codec?: string }[];
+  subtitleTracks?: { index: number; language?: string; title?: string; codec?: string }[];
+  selectedAudioTrackIndex?: number;
 
   // Metadata
   createdAt: Date;

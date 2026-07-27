@@ -1,0 +1,123 @@
+{
+  "users": [
+    {
+      "id": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "username": "Krishna_1221",
+      "password": "1221",
+      "avatar": {
+        "emoji": "👦",
+        "gradient": "from-[#84cc16] to-[#10b981]",
+        "name": "Young Boy"
+      }
+    },
+    {
+      "id": "d829f2e1-fb73-4caa-b2ad-5b0fc90d585b",
+      "username": "SIddharth",
+      "password": "1035"
+    },
+    {
+      "id": "1a073e89-ee72-4963-9334-ad63f16e334a",
+      "username": "sid",
+      "password": "123"
+    }
+  ],
+  "history": [
+    {
+      "id": "fefb6c1b-2265-4898-9614-7440fd6f8fab",
+      "userId": "d829f2e1-fb73-4caa-b2ad-5b0fc90d585b",
+      "movieName": "1784997540743-1000256000.mp4",
+      "filename": "1785058874323-1784997540743-1000256000.mp4",
+      "watchedAt": "2026-07-26T09:56:24.596Z",
+      "isHost": false,
+      "coWatchers": [
+        "Krishna_1221"
+      ]
+    },
+    {
+      "id": "f06ec520-774b-481c-9da8-9ea998fc72a7",
+      "userId": "1a073e89-ee72-4963-9334-ad63f16e334a",
+      "movieName": "1784997540743-1000256000.mp4",
+      "filename": "1785058874323-1784997540743-1000256000.mp4",
+      "watchedAt": "2026-07-26T10:01:39.929Z",
+      "isHost": false,
+      "coWatchers": [
+        "Krishna_1221",
+        "SIddharth"
+      ]
+    },
+    {
+      "id": "267ee1bb-0130-4506-b90b-4d04670c2863",
+      "userId": "1a073e89-ee72-4963-9334-ad63f16e334a",
+      "movieName": "1784997540743-1000256000.mp4",
+      "filename": "1785060542821-1784997540743-1000256000.mp4",
+      "watchedAt": "2026-07-26T10:09:25.446Z",
+      "isHost": false,
+      "coWatchers": [
+        "Krishna_1221"
+      ]
+    },
+    {
+      "id": "22736ace-8d01-4715-a6c0-2e2748136f24",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "Direct Video Stream",
+      "filename": "stream-url",
+      "watchedAt": "2026-07-26T16:51:34.102Z",
+      "isHost": true,
+      "coWatchers": []
+    },
+    {
+      "id": "6524cc09-6083-45ca-bf5a-71f91e77ab02",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "Off.Campus.S01E08.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
+      "filename": "1785084721717-Off.Campus.S01E08.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
+      "watchedAt": "2026-07-26T16:52:12.163Z",
+      "isHost": true,
+      "coWatchers": []
+    },
+    {
+      "id": "ffff68e5-76a9-4bcc-b432-0e64b62c75ad",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "Off.Campus.S01E08.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
+      "filename": "1785084913326-Off.Campus.S01E08.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
+      "watchedAt": "2026-07-26T16:55:18.350Z",
+      "isHost": true,
+      "coWatchers": []
+    },
+    {
+      "id": "acdd8ea5-2d5a-449a-932e-9e58c2bb7413",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "Off.Campus.S01E08.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
+      "filename": "1785084930977-Off.Campus.S01E08.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
+      "watchedAt": "2026-07-26T16:55:34.482Z",
+      "isHost": true,
+      "coWatchers": []
+    },
+    {
+      "id": "3c1b60b2-7673-443f-b7db-69e05ce73307",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "Off.Campus.S01E08.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
+      "filename": "1785123423047-Off.Campus.S01E08.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
+      "watchedAt": "2026-07-27T03:37:15.947Z",
+      "isHost": true,
+      "coWatchers": []
+    },
+    {
+      "id": "4a337e8f-421b-44ef-8d4d-67131aa097e8",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "1784997540743-1000256000.mp4",
+      "filename": "1785125293401-1784997540743-1000256000.mp4",
+      "watchedAt": "2026-07-27T04:08:16.788Z",
+      "isHost": true,
+      "coWatchers": []
+    },
+    {
+      "id": "7003c9b4-4664-4442-baaa-7476c67ba928",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "1784997540743-1000256000.mp4",
+      "filename": "1785125436134-1784997540743-1000256000.mp4",
+      "watchedAt": "2026-07-27T04:10:38.534Z",
+      "isHost": true,
+      "coWatchers": []
+    }
+  ]
+}

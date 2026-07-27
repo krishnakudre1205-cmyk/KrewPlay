@@ -7,4 +7,30 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+
+  server: {
+    allowedHosts: [
+      "cultural-swinger-march.ngrok-free.dev",
+    ],
+
+    proxy: {
+      "/rooms": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
+      "/movies": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
+      "/socket.io": {
+        target: "http://localhost:5000",
+        ws: true,
+        changeOrigin: true,
+      },
+      "/auth": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
+    },
+  },
 });
