@@ -554,12 +554,19 @@ export default function Host() {
               {streamMode === "library" && !uploaded && (
                 <div className="space-y-4 rounded-2xl bg-burgundy-950/40 border border-burgundy-900/40 p-5">
                   {/* Continue Watching shelf inside Library */}
-                  {continueWatching.length > 0 && (
-                    <div className="w-full pb-4 border-b border-burgundy-900/30 text-left">
-                      <h2 className="text-xs font-bold uppercase tracking-wider text-lavender-200/50 mb-3 flex items-center gap-1.5 pl-1">
-                        <Play className="h-3.5 w-3.5 text-maroon-500 fill-current" />
-                        <span>Continue Watching</span>
-                      </h2>
+                  <div className="w-full pb-4 border-b border-burgundy-900/30 text-left">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-lavender-200/50 mb-3 flex items-center gap-1.5 pl-1">
+                      <Play className="h-3.5 w-3.5 text-maroon-500 fill-current" />
+                      <span>Continue Watching</span>
+                    </h2>
+                    
+                    {continueWatching.length === 0 ? (
+                      <div className="bg-burgundy-950/40 border border-burgundy-900/40 rounded-xl p-6 text-center">
+                        <PlayCircle className="h-8 w-8 text-burgundy-900 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm text-lavender-200/40 font-medium">No movies in progress.</p>
+                        <p className="text-xs text-lavender-200/30 mt-1">Start watching a movie in your library to continue it later.</p>
+                      </div>
+                    ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {continueWatching.map((item) => {
                           const remainingSec = item.duration - item.currentPosition;
@@ -626,8 +633,9 @@ export default function Host() {
                           );
                         })}
                       </div>
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-lavender-200/40" />
