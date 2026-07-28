@@ -4,6 +4,7 @@ import { socket } from "../../services/socket";
 import { motion } from "framer-motion";
 import { User, KeyRound, Tv, ChevronRight } from "lucide-react";
 import { API_BASE_URL } from "../../config/api";
+import { toast } from "react-hot-toast";
 
 export default function Join() {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ export default function Join() {
 
   async function joinRoom() {
     if (!name.trim() || !roomCode.trim()) {
-      alert("Please enter your name and room code");
+      toast.error("Please enter your name and room code");
       return;
     }
 
@@ -49,7 +50,7 @@ export default function Join() {
 
       if (!res.ok) {
         const error = await res.json();
-        alert(error.message || "Failed to join room");
+        toast.error(error.message || "Failed to join room");
         return;
       }
 
@@ -64,9 +65,10 @@ export default function Join() {
 
       // Navigate to the room page
       navigate(`/room/${roomCode}`);
+      toast.success("Joined watch room successfully!", { icon: "🎉" });
     } catch (err) {
       console.error(err);
-      alert("Failed to join room");
+      toast.error("Failed to join room");
     } finally {
       setLoading(false);
     }

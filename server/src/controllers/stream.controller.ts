@@ -35,11 +35,16 @@ export function streamMovie(req: Request, res: Response) {
 
   const CHUNK_SIZE = 1024 * 1024;
 
-  const start = Number(range.replace(/\D/g, ""));
-  const end = Math.min(
-    start + CHUNK_SIZE,
-    fileSize - 1
-  );
+  const parts = range.replace(/bytes=/, "").split("-");
+  const start = parseInt(parts[0], 10);
+  const end = parts[1] ? Math.min(parseInt(parts[1], 10), fileSize - 1) : Math.min(start + CHUNK_SIZE, fileSize - 1);
+
+  if (isNaN(start) || start >= fileSize) {
+    res.writeHead(416, {
+      "Content-Range": `bytes */${fileSize}`
+    });
+    return res.end();
+  }
 
   const contentLength = end - start + 1;
 

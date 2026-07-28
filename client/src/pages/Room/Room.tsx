@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { toast } from "react-hot-toast";
 import { useParams, useNavigate } from "react-router-dom";
 import { socket } from "../../services/socket";
 import { API_BASE_URL } from "../../config/api";
@@ -8,6 +9,8 @@ import {
   toggleMute,
 } from "../../services/webrtc";
 import TopBar from "../../components/room/TopBar";
+import { THEMES } from "../../config/themes";
+import ThemeParticles from "../../components/room/ThemeParticles";
 import { 
   RotateCcw, 
   RotateCw, 
@@ -22,7 +25,11 @@ import {
   Send,
   Play,
   Settings,
-  Subtitles
+  Subtitles,
+  Film,
+  X,
+  FileVideo,
+  Palette
 } from "lucide-react";
 
 type Participant = {
@@ -50,6 +57,7 @@ type RoomData = {
     playbackRate: number;
     lastUpdated: number;
   };
+  theme?: string;
 };
 
 type ChatMessage = {
@@ -97,7 +105,7 @@ export default function Room() {
     "🎉",
   ];
 
-  const [theatreMode, setTheatreMode] = useState(true);
+  const [theatreMode, setTheatreMode] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const popupTimeout = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -127,6 +135,63 @@ export default function Room() {
   const [selectedSubtitle, setSelectedSubtitle] = useState<number | null>(null);
   const [showSettingsPopover, setShowSettingsPopover] = useState(false);
   const countdownTimerRef = useRef<number | null>(null);
+  const [movieDetails, setMovieDetails] = useState<any | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [isPlayingState, setIsPlayingState] = useState(false);
+  const ambilightCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  
+  const [showChangeModal, setShowChangeModal] = useState(false);
+  const [library, setLibrary] = useState<any[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
+
+  const [activeTheme, setActiveTheme] = useState("minimal");
+  const [showThemeModal, setShowThemeModal] = useState(false);
+
+  const isMeHost = participants.find(
+    p => p.id === localStorage.getItem("participantId")
+  )?.isHost;
+
+  async function fetchLibrary() {
+    const user = localStorage.getItem("user");
+    if (!user) return;
+    const uid = JSON.parse(user).id;
+    setLoadingLibrary(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/library/${uid}`);
+      if (res.ok) {
+        const data = await res.json();
+        setLibrary(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingLibrary(false);
+    }
+  }
+
+  async function handleHostMovieChange(libraryId: string) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/movies/${id}/select-library`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ libraryId }),
+      });
+      if (!res.ok) throw new Error("Failed to change movie");
+      socket.emit("host-changed-movie", { roomCode: id });
+      setShowChangeModal(false);
+      toast.success("Movie changed successfully!", { icon: "🎬" });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  }
+
+  function changeRoomTheme(themeId: string) {
+    if (!isMeHost) return;
+    setActiveTheme(themeId);
+    socket.emit("change-theme", { roomCode: id, theme: themeId });
+    setShowThemeModal(false);
+    toast.success("Theme changed!", { icon: "🎨" });
+  }
 
   // Derive streamUrl based on selectedAudio track parameter
   const streamUrl = roomData?.movieUrl
@@ -137,8 +202,182 @@ export default function Room() {
 
   const youtubeId = getYouTubeVideoId(streamUrl);
 
+  useEffect(() => {
+    if (!id || !roomData?.movieName) {
+      setMovieDetails(null);
+      return;
+    }
+
+    setLoadingDetails(true);
+    fetch(`${API_BASE_URL}/movies/${id}/details`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.details) {
+          setMovieDetails(data.details);
+        } else {
+          setMovieDetails({
+            title: (roomData?.movieName || "").replace(/[-._]/g, " ").replace(/\.(mp4|mkv|avi|webm|mov)$/i, ""),
+            year: "N/A",
+            runtime: "N/A",
+            imdbRating: "N/A",
+            tmdbRating: "N/A",
+            genres: ["Cinema"],
+            overview: "Movie details unavailable.",
+            languages: ["English"],
+            cast: [],
+            director: "N/A",
+            studio: "N/A",
+          });
+        }
+      })
+      .catch(err => {
+        console.error("Error loading movie details:", err);
+        setMovieDetails({
+          title: (roomData?.movieName || "").replace(/[-._]/g, " ").replace(/\.(mp4|mkv|avi|webm|mov)$/i, ""),
+          year: "N/A",
+          runtime: "N/A",
+          imdbRating: "N/A",
+          tmdbRating: "N/A",
+          genres: ["Cinema"],
+          overview: "Movie details unavailable.",
+          languages: ["English"],
+          cast: [],
+          director: "N/A",
+          studio: "N/A",
+        });
+      })
+      .finally(() => {
+        setLoadingDetails(false);
+      });
+  }, [id, roomData?.movieName]);
+
+  const lastSavedPosition = useRef<number>(0);
+  const [hasToastedCw, setHasToastedCw] = useState<Record<string, boolean>>({});
+
+  const saveProgress = async (currentPos: number, forced = false) => {
+    const session = localStorage.getItem("user");
+    if (!session || !roomData?.movieName) return;
+    const user = JSON.parse(session);
+
+    if (!forced && Math.abs(currentPos - lastSavedPosition.current) < 2) {
+      return;
+    }
+
+    lastSavedPosition.current = currentPos;
+    const duration = videoRef.current ? videoRef.current.duration : 0;
+    const poster = movieDetails?.poster || "";
+    const movieId = youtubeId || id || "";
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/movies/continue-watching`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          movieId,
+          movieTitle: roomData.movieName,
+          poster,
+          duration: duration || 0,
+          currentPosition: currentPos,
+          lastRoomCode: id,
+          isHost: !!isMeHost,
+        })
+      });
+      if (res.ok) {
+        if (!hasToastedCw[movieId]) {
+          toast.success("Progress saved to Continue Watching", { id: "cw-saved-toast", duration: 2000 });
+          setHasToastedCw(prev => ({ ...prev, [movieId]: true }));
+        } else {
+          toast.success("Continue Watching progress updated", { id: "cw-updated-toast", duration: 1500 });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to save progress:", err);
+    }
+  };
+
+  useEffect(() => {
+    const handleUnload = () => {
+      if (videoRef.current) {
+        const session = localStorage.getItem("user");
+        if (session && roomData?.movieName) {
+          const user = JSON.parse(session);
+          const currentPos = videoRef.current.currentTime;
+          const duration = videoRef.current.duration;
+          const payload = JSON.stringify({
+            userId: user.id,
+            movieId: youtubeId || id || "",
+            movieTitle: roomData.movieName,
+            poster: movieDetails?.poster || "",
+            duration: duration || 0,
+            currentPosition: currentPos,
+            lastRoomCode: id,
+            isHost: !!isMeHost,
+          });
+          
+          navigator.sendBeacon(
+            `${API_BASE_URL}/movies/continue-watching`,
+            new Blob([payload], { type: "application/json" })
+          );
+        }
+      }
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload);
+    
+    return () => {
+      handleUnload();
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
+    };
+  }, [roomData?.movieName, id, youtubeId, isMeHost, movieDetails?.poster]);
+
+  // Premium Ambilight Canvas Backglow Effect
+  useEffect(() => {
+    if (!theatreMode || youtubeId || !videoRef.current) return;
+
+    let animationId: number;
+    const video = videoRef.current;
+    const canvas = ambilightCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+
+    const updateAmbilight = () => {
+      // Throttle or don't draw if paused/ended to save CPU
+      if (video.paused || video.ended) {
+        animationId = requestAnimationFrame(updateAmbilight);
+        return;
+      }
+
+      try {
+        // Draw video frame to the tiny canvas
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      } catch (err) {
+        // Ignore CORS or tainting errors
+      }
+
+      animationId = requestAnimationFrame(updateAmbilight);
+    };
+
+    animationId = requestAnimationFrame(updateAmbilight);
+
+    return () => {
+      cancelAnimationFrame(animationId);
+    };
+  }, [theatreMode, youtubeId, streamUrl]);
+
   const selectSubtitleTrack = (index: number | null) => {
     setSelectedSubtitle(index);
+    if (index === null) {
+      toast("Subtitles turned off", { icon: "💬" });
+    } else {
+      const targetTrack = roomData?.subtitleTracks?.find(t => t.index === index);
+      toast.success(`Subtitles: ${targetTrack?.title || targetTrack?.language || `Track ${index}`}`, { icon: "💬" });
+    }
+
     if (!videoRef.current) return;
     const tracks = videoRef.current.textTracks;
     for (let i = 0; i < tracks.length; i++) {
@@ -252,6 +491,7 @@ export default function Room() {
 
   async function leaveRoomNow(newHostId?: string) {
     leaveVoice();
+    toast("Leaving watch party...", { id: "leave-room-toast", icon: "🚪" });
     const participantId = localStorage.getItem("participantId");
 
     const response = await fetch(`${API_BASE_URL}/rooms/${id}/leave`, {
@@ -286,7 +526,24 @@ export default function Room() {
       if (!res.ok) return;
       const room: RoomData = await res.json();
       setRoomData(room);
-      setParticipants(room.participants);
+      setActiveTheme(room.theme || "minimal");
+      setParticipants(prev => {
+        if (prev.length > 0 && room.participants) {
+          const joined = room.participants.filter(p => !prev.some(op => op.id === p.id));
+          joined.forEach(p => {
+            if (p.id !== localStorage.getItem("participantId")) {
+              toast.success(`${p.name} joined the watch party!`, { icon: "👋" });
+            }
+          });
+          const left = prev.filter(op => !room.participants.some(p => p.id === op.id));
+          left.forEach(p => {
+            if (p.id !== localStorage.getItem("participantId")) {
+              toast.error(`${p.name} left the watch party.`, { icon: "🚶" });
+            }
+          });
+        }
+        return room.participants;
+      });
     } catch (err) {
       console.error(err);
     }
@@ -303,10 +560,15 @@ export default function Room() {
     lastSync.current = Date.now();
     const participantId = localStorage.getItem("participantId");
     const me = participants.find((p) => p.id === participantId);
+    let pName = me?.name;
+    if (!pName) {
+      const u = localStorage.getItem("user");
+      pName = u ? JSON.parse(u).username : "Unknown";
+    }
 
     socket.emit("player-sync", {
       roomCode: id,
-      participantName: me?.name ?? "Unknown",
+      participantName: pName,
       action,
       player: {
         isPlaying: !videoRef.current.paused,
@@ -318,22 +580,27 @@ export default function Room() {
   }
 
   function handlePlay() {
+    setIsPlayingState(true);
     if (locked) return;
     if (isSyncing.current) return;
     syncPlayer("play");
+    if (videoRef.current) saveProgress(videoRef.current.currentTime, true);
   }
 
   function handlePause() {
+    setIsPlayingState(false);
     if (locked) return;
     if (isSyncing.current) return;
     if (videoRef.current?.seeking) return;
     syncPlayer("pause");
+    if (videoRef.current) saveProgress(videoRef.current.currentTime, true);
   }
 
   function handleSeek() {
     if (locked) return;
     if (isSyncing.current) return;
     syncPlayer("seek");
+    if (videoRef.current) saveProgress(videoRef.current.currentTime, true);
   }
 
   function handleSpeed() {
@@ -423,8 +690,12 @@ export default function Room() {
     }
     if (!id) return;
     loadRoom();
+    toast.success("Joined watch room successfully!", { icon: "🎉", id: "join-room-toast" });
     joinVoice(id)
-      .then(() => setVoiceJoined(true))
+      .then(() => {
+        setVoiceJoined(true);
+        toast.success("Connected to voice chat!", { icon: "🎙️" });
+      })
       .catch(console.error);
 
     function handleHostChanged() {
@@ -439,6 +710,7 @@ export default function Room() {
           ? `🔒 Controls locked by ${data.lockedBy}`
           : "🔓 Controls unlocked"
       );
+      toast(data.locked ? `Controls locked by ${data.lockedBy}` : "Controls unlocked", { icon: data.locked ? "🔒" : "🔓" });
     }
 
     function handleReaction(data: { emoji: string; participantName: string; }) {
@@ -532,6 +804,7 @@ export default function Room() {
           ? `⏩ ${data.participantName} skipped +10s`
           : `⏪ ${data.participantName} skipped -10s`
       );
+      toast(`${data.participantName} skipped ${data.direction === "forward" ? "+10s" : "-10s"}`, { icon: "⏩", id: "player-skip-toast" });
 
       if (activityTimeout.current) {
         clearTimeout(activityTimeout.current);
@@ -578,16 +851,20 @@ export default function Room() {
         case "play":
           videoRef.current.play().catch(() => {});
           setActivity(`▶️ ${data.participantName} played`);
+          toast.success(`${data.participantName} resumed the movie`, { icon: "▶️", id: "player-sync-toast" });
           break;
         case "pause":
           videoRef.current.pause();
           setActivity(`⏸️ ${data.participantName} paused`);
+          toast(`${data.participantName} paused the movie`, { icon: "⏸️", id: "player-sync-toast" });
           break;
         case "seek":
           setActivity(`⏩ ${data.participantName} skipped`);
+          toast(`${data.participantName} seeked playback`, { icon: "⏩", id: "player-sync-toast" });
           break;
         case "speed":
           setActivity(`⚡ ${data.participantName} changed speed to ${data.player.playbackRate}x`);
+          toast(`${data.participantName} set playback speed to ${data.player.playbackRate}x`, { icon: "⚡", id: "player-sync-toast" });
           break;
       }
 
@@ -600,6 +877,9 @@ export default function Room() {
 
     function handlePlayerState(player: { isPlaying: boolean; currentTime: number; playbackRate: number; lastUpdated: number; }) {
       if (!videoRef.current) return;
+      if (isSyncing.current) return;
+      
+      isSyncing.current = true;
       videoRef.current.playbackRate = player.playbackRate;
       setSpeed(player.playbackRate);
 
@@ -609,7 +889,19 @@ export default function Room() {
       if (!player.isPlaying && !videoRef.current.paused) {
         videoRef.current.pause();
       }
+      
+      setTimeout(() => { isSyncing.current = false; }, 150);
     }
+
+    const handleMovieChanged = () => {
+      toast("The host has changed the movie!", { icon: "🎬", duration: 5000 });
+      loadRoom();
+    };
+
+    const handleThemeChanged = (themeId: string) => {
+      setActiveTheme(themeId);
+      toast("Room theme updated!", { icon: "🎨" });
+    };
 
     socket.on("player-sync", handlePlayerSync);
     socket.on("player-state", handlePlayerState);
@@ -622,6 +914,8 @@ export default function Room() {
     socket.on("host-changed", handleHostChanged);
     socket.on("start-countdown", handleStartCountdown);
     socket.on("reaction", handleReaction);
+    socket.on("movie-changed", handleMovieChanged);
+    socket.on("theme-changed", handleThemeChanged);
 
     return () => {
       leaveVoice();
@@ -636,36 +930,45 @@ export default function Room() {
       socket.off("player-sync", handlePlayerSync);
       socket.off("player-state", handlePlayerState);
       socket.off("player-skip", handlePlayerSkip);
+      socket.off("movie-changed", handleMovieChanged);
+      socket.off("theme-changed", handleThemeChanged);
       if (activityTimeout.current) {
         clearTimeout(activityTimeout.current);
       }
     };
   }, [id, navigate]);
 
-  const isMeHost = participants.find(
-    p => p.id === localStorage.getItem("participantId")
-  )?.isHost;
+
+
+  const shouldDim = theatreMode && isPlayingState;
+  const theme = THEMES[activeTheme] || THEMES.minimal;
 
   return (
-    <div className={`min-h-screen text-lavender-100 p-4 md:p-6 lg:p-8 transition-all duration-700 relative z-10 ${theatreMode ? "bg-[#080004]" : "bg-[#14020c]"}`}>
-      <TopBar roomCode={id ?? ""} onLeave={handleLeaveRoom} />
+    <div className={`min-h-screen text-lavender-100 p-4 md:p-6 lg:p-8 transition-colors duration-1000 relative z-10 ${theatreMode ? "bg-[#080004]" : theme.roomBg}`}>
+      {!theatreMode && <ThemeParticles type={theme.particleType} />}
+      {!theatreMode && theme.ambientGlow && (
+        <div className={`absolute inset-0 pointer-events-none z-0 ${theme.ambientGlow}`} />
+      )}
+      
+      <div className={`transition-all duration-700 relative z-10 ${shouldDim ? "opacity-15 hover:opacity-100 hover:duration-200" : "opacity-100"}`}>
+        <TopBar roomCode={id ?? ""} onLeave={handleLeaveRoom} />
+      </div>
 
       {/* Main Theatre Box */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto items-start relative z-10">
         
         {/* Left Side: Video Player */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-burgundy-900/10 border border-burgundy-900/30 rounded-3xl p-4 md:p-6 shadow-2xl relative">
+          <div className={`${theatreMode ? "bg-burgundy-900/10 border-burgundy-900/30" : `${theme.panelBg} ${theme.borderColor}`} border rounded-3xl p-4 md:p-6 shadow-2xl relative transition-colors duration-1000`}>
             
-            {/* Ambient Background glow backlight */}
+            {/* Ambient scene-reactive Ambilight glow backlight */}
             {theatreMode && !youtubeId && (
-              <div className="absolute inset-0 z-0 overflow-hidden rounded-3xl opacity-35 scale-[1.02] blur-3xl transition-opacity duration-700 pointer-events-none">
-                <video
-                  className="w-full h-full object-cover"
-                  src={streamUrl}
-                  autoPlay
-                  muted
-                  loop
+              <div className="absolute inset-[-40px] z-0 overflow-hidden rounded-3xl opacity-40 blur-[80px] transition-opacity duration-700 pointer-events-none bg-gradient-to-tr from-maroon-850 via-burgundy-900 to-lavender-900/40 animate-[spin_25s_linear_infinite]">
+                <canvas
+                  ref={ambilightCanvasRef}
+                  width={64}
+                  height={36}
+                  className="w-full h-full object-cover mix-blend-screen"
                 />
               </div>
             )}
@@ -689,7 +992,7 @@ export default function Room() {
             {/* Big Video element */}
             <div
               ref={playerRef}
-              className={`relative overflow-hidden rounded-2xl bg-black border border-burgundy-900/40 shadow-inner z-20 aspect-video ${theatreMode ? "ring-2 ring-lavender-500/10" : ""}`}
+              className={`relative overflow-hidden rounded-2xl bg-black border transition-all duration-500 shadow-inner z-20 aspect-video ${theatreMode ? "border-maroon-500/40 shadow-[0_0_40px_rgba(180,20,80,0.25)] ring-1 ring-maroon-500/10" : "border-burgundy-900/40"}`}
               onMouseMove={() => {
                 setShowControls(true);
                 if (controlsTimeout.current) {
@@ -774,6 +1077,12 @@ export default function Room() {
                   onWaiting={() => setBuffering(true)}
                   onPlaying={() => setBuffering(false)}
                   onLoadedMetadata={handleLoadedMetadata}
+                  onTimeUpdate={(e) => {
+                    const currentTime = e.currentTarget.currentTime;
+                    if (Math.floor(currentTime) % 10 === 0) {
+                      saveProgress(currentTime);
+                    }
+                  }}
                 >
                   {roomData?.subtitleTracks?.map((track) => (
                     <track
@@ -866,7 +1175,7 @@ export default function Room() {
             </div>
 
             {/* Media status bar & Controls */}
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-4 bg-burgundy-950/45 border border-burgundy-900/50 rounded-2xl p-4.5 z-20 relative">
+            <div className={`mt-5 flex flex-wrap items-center justify-between gap-4 ${theatreMode ? "bg-burgundy-950/45 border-burgundy-900/50" : `${theme.panelBg} ${theme.borderColor}`} border rounded-2xl p-4.5 z-20 relative transition-colors duration-1000`}>
               
               {/* Media descriptors */}
               <div className="flex items-center gap-4 text-xs font-medium text-lavender-200/60">
@@ -874,10 +1183,7 @@ export default function Room() {
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   <span className="text-[10px] font-bold uppercase tracking-wider text-lavender-200">Playing</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Users size={14} />
-                  <span>{participants.length} watching</span>
-                </div>
+                
                 <div>
                   <span className="font-semibold text-lavender-300">{speed}x</span> speed
                 </div>
@@ -913,6 +1219,31 @@ export default function Room() {
                   {locked ? <Unlock size={13} /> : <Lock size={13} />}
                   <span>{locked ? "Unlock" : "Lock Room"}</span>
                 </button>
+
+                {isMeHost && (
+                  <>
+                    <button
+                      onClick={() => setShowThemeModal(true)}
+                      className={`flex items-center gap-1.5 h-9 px-3 rounded-xl border text-xs font-bold transition duration-300 cursor-pointer ${theme.borderColor} bg-black/20 hover:bg-black/40 ${theme.accentText}`}
+                      title="Change Theme"
+                    >
+                      <Palette size={13} />
+                      <span>Theme</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        fetchLibrary();
+                        setShowChangeModal(true);
+                      }}
+                      className="flex items-center gap-1.5 h-9 px-3 rounded-xl border border-burgundy-900/60 bg-burgundy-950/60 text-lavender-350 hover:text-white hover:bg-burgundy-900/40 text-xs font-bold transition duration-300 cursor-pointer"
+                      title="Change Movie"
+                    >
+                      <Film size={13} />
+                      <span>Change Movie</span>
+                    </button>
+                  </>
+                )}
 
                 <button
                   onClick={() => {
@@ -970,6 +1301,8 @@ export default function Room() {
                             onChange={(e) => {
                               const val = e.target.value ? parseInt(e.target.value) : undefined;
                               setSelectedAudio(val);
+                              const track = roomData?.audioTracks?.find(t => t.index === val);
+                              toast.success(`Audio changed to: ${track?.title || `Track ${val}`}`, { icon: "🔊" });
                             }}
                             className="w-full bg-burgundy-900/40 border border-burgundy-900/60 text-xs text-lavender-200 rounded-lg p-2 focus:outline-none focus:border-lavender-500/50"
                           >
@@ -1013,10 +1346,126 @@ export default function Room() {
               </div>
             </div>
           </div>
+
+          {/* Movie Details Panel */}
+          {roomData?.movieName && (
+            <div className={`bg-burgundy-900/10 border border-burgundy-900/30 rounded-3xl p-5 md:p-6 shadow-2xl relative overflow-hidden backdrop-blur-md transition-all duration-700 ${shouldDim ? "opacity-10 hover:opacity-100 hover:duration-200" : "opacity-100"}`}>
+              {loadingDetails ? (
+                /* Skeleton Loader */
+                <div className="animate-pulse space-y-4">
+                  <div className="h-6 bg-burgundy-900/40 rounded w-1/3"></div>
+                  <div className="flex gap-4">
+                    <div className="w-24 h-36 bg-burgundy-900/40 rounded-xl"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-burgundy-900/40 rounded w-3/4"></div>
+                      <div className="h-4 bg-burgundy-900/40 rounded w-1/2"></div>
+                      <div className="h-4 bg-burgundy-900/40 rounded w-5/6"></div>
+                    </div>
+                  </div>
+                </div>
+              ) : movieDetails ? (
+                <div className="space-y-4">
+                  {/* Backdrop */}
+                  {movieDetails.backdrop && (
+                    <div className="absolute inset-0 -z-10 opacity-[0.04] pointer-events-none">
+                      <img src={movieDetails.backdrop} alt="" className="w-full h-full object-cover blur-sm" />
+                    </div>
+                  )}
+                  
+                  {/* Title and Ratings */}
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl md:text-2xl font-bold tracking-tight text-white capitalize">
+                        {movieDetails.title}
+                      </h2>
+                      <div className="flex flex-wrap gap-2 items-center text-xs text-lavender-300/70 mt-1">
+                        {movieDetails.year && movieDetails.year !== "N/A" && <span>{movieDetails.year}</span>}
+                        {movieDetails.year && movieDetails.year !== "N/A" && <span className="text-lavender-500">•</span>}
+                        {movieDetails.runtime && movieDetails.runtime !== "N/A" && <span>{movieDetails.runtime}</span>}
+                        {movieDetails.runtime && movieDetails.runtime !== "N/A" && <span className="text-lavender-500">•</span>}
+                        {movieDetails.studio && movieDetails.studio !== "N/A" && <span>{movieDetails.studio}</span>}
+                      </div>
+                    </div>
+                    
+                    {/* Ratings badges */}
+                    <div className="flex gap-2">
+                      {movieDetails.imdbRating && movieDetails.imdbRating !== "N/A" && (
+                        <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-[10px] font-black px-2 py-1 rounded-md">
+                          <span>IMDb</span>
+                          <span>{movieDetails.imdbRating}</span>
+                        </div>
+                      )}
+                      {movieDetails.tmdbRating && movieDetails.tmdbRating !== "N/A" && (
+                        <div className="flex items-center gap-1 bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[10px] font-black px-2 py-1 rounded-md">
+                          <span>TMDB</span>
+                          <span>{movieDetails.tmdbRating}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Content Layout */}
+                  <div className="flex flex-col md:flex-row gap-5">
+                    {/* Poster */}
+                    {movieDetails.poster && (
+                      <div className="w-24 md:w-32 flex-shrink-0 self-center md:self-start">
+                        <img
+                          src={movieDetails.poster}
+                          alt={`${movieDetails.title} Poster`}
+                          className="w-full h-auto rounded-2xl border border-lavender-500/10 shadow-lg object-cover"
+                        />
+                      </div>
+                    )}
+
+                    {/* Description and Info */}
+                    <div className="flex-1 space-y-3">
+                      {/* Overview */}
+                      <p className="text-xs text-lavender-200/80 leading-relaxed font-light">
+                        {movieDetails.overview}
+                      </p>
+
+                      {/* Genres & Languages */}
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {movieDetails.genres?.map((g: string, idx: number) => (
+                          <span key={idx} className="text-[10px] font-medium bg-maroon-850/30 border border-maroon-700/20 text-lavender-300 px-2 py-0.5 rounded-full">
+                            {g}
+                          </span>
+                        ))}
+                        {movieDetails.languages?.map((l: string, idx: number) => (
+                          <span key={idx} className="text-[10px] font-medium bg-burgundy-950/40 border border-burgundy-900/30 text-lavender-350/80 px-2 py-0.5 rounded-full">
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Cast & Director */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-burgundy-900/25 text-[11px]">
+                        {movieDetails.director && movieDetails.director !== "N/A" && (
+                          <div>
+                            <span className="text-lavender-350/60 font-medium">Director: </span>
+                            <span className="text-lavender-200">{movieDetails.director}</span>
+                          </div>
+                        )}
+                        {movieDetails.cast && movieDetails.cast.length > 0 && (
+                          <div className="sm:col-span-2">
+                            <span className="text-lavender-350/60 font-medium">Cast: </span>
+                            <span className="text-lavender-200">{movieDetails.cast.join(", ")}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-lavender-300/50 text-center py-4">Movie details unavailable.</div>
+              )}
+            </div>
+          )}
+
         </div>
 
         {/* Right Side: Participant list & Chat */}
-        <div className="space-y-6 lg:h-full lg:flex lg:flex-col justify-between">
+        <div className={`space-y-6 lg:h-full lg:flex lg:flex-col justify-between transition-all duration-700 ${shouldDim ? "opacity-15 hover:opacity-100 hover:duration-200" : "opacity-100"}`}>
           
           {/* Participants panel */}
           <div className="bg-burgundy-900/10 border border-burgundy-900/30 rounded-3xl p-5 shadow-xl flex flex-col max-h-[300px] lg:max-h-[350px]">
@@ -1135,7 +1584,7 @@ export default function Room() {
 
 
 
-      {/* Host Transfer Dialog modal */}
+      {/* Host Transfer Dialog */}
       {showTransferDialog && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] backdrop-blur-xs">
           <div className="bg-burgundy-950 border border-burgundy-900/60 p-6 md:p-8 rounded-3xl w-full max-w-md shadow-2xl shadow-black/80 relative">
@@ -1199,6 +1648,113 @@ export default function Room() {
         </div>
       )}
 
+      {/* Change Movie Modal */}
+      {showChangeModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#14020c] border border-burgundy-900/40 rounded-3xl p-6 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-lavender-100 flex items-center gap-2">
+                <Film className="w-5 h-5 text-maroon-500" />
+                Change Movie
+              </h2>
+              <button 
+                onClick={() => setShowChangeModal(false)}
+                className="p-2 rounded-xl bg-burgundy-950/50 hover:bg-maroon-900/40 text-lavender-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2">
+              {loadingLibrary ? (
+                <div className="flex justify-center p-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-maroon-500"></div>
+                </div>
+              ) : library.length === 0 ? (
+                <div className="text-center p-10 text-lavender-300/50">
+                  <FileVideo className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                  <p>Your library is empty.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-4">
+                  {library.filter(m => m.status === "ready").map((item) => (
+                    <div 
+                      key={item.id} 
+                      onClick={() => handleHostMovieChange(item.id)}
+                      className="bg-burgundy-950/40 border border-burgundy-900/30 hover:border-maroon-500/50 rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 hover:shadow-[0_0_15px_rgba(180,20,80,0.15)] flex flex-col"
+                    >
+                      <div className="relative aspect-video bg-black/50">
+                        {item.poster ? (
+                          <img src={item.poster} alt={item.movieName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FileVideo className="w-8 h-8 text-lavender-300/20" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Play className="w-10 h-10 text-white ml-1" fill="currentColor" />
+                        </div>
+                      </div>
+                      <div className="p-3">
+                        <h3 className="text-sm font-bold text-lavender-100 truncate" title={item.movieName}>
+                          {item.movieName}
+                        </h3>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Theme Selection Modal */}
+      {showThemeModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className={`${theatreMode ? "bg-burgundy-950/45 border-burgundy-900/50" : `${theme.panelBg} ${theme.borderColor}`} border rounded-3xl p-6 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl transition-colors duration-1000`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-lavender-100 flex items-center gap-2">
+                <Palette className="w-5 h-5 text-maroon-500" />
+                Select Room Theme
+              </h2>
+              <button 
+                onClick={() => setShowThemeModal(false)}
+                className="p-2 rounded-xl bg-burgundy-950/50 hover:bg-maroon-900/40 text-lavender-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-4">
+              {Object.values(THEMES).map((t) => (
+                <div 
+                  key={t.id} 
+                  onClick={() => changeRoomTheme(t.id)}
+                  className={`${t.panelBg} border ${t.borderColor} hover:scale-[1.02] rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 flex flex-col shadow-lg`}
+                >
+                  <div className={`relative h-20 w-full ${t.previewColor} border-b ${t.borderColor} overflow-hidden`}>
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-white/5 transition-opacity" />
+                    {t.id === activeTheme && (
+                      <div className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full z-10">
+                        Active
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4 relative">
+                    <h3 className={`text-base font-bold ${t.accentText} mb-1`}>
+                      {t.name}
+                    </h3>
+                    <p className="text-xs text-lavender-200/70">
+                      {t.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

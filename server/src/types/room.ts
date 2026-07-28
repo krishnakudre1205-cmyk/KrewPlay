@@ -42,6 +42,13 @@ export interface Room {
   subtitleTracks?: { index: number; language?: string; title?: string; codec?: string }[];
   selectedAudioTrackIndex?: number;
 
+  // Lock State
+  locked?: boolean;
+  lockedBy?: string;
+
+  // Visual Theme
+  theme?: string;
+
   // Metadata
   createdAt: Date;
 }

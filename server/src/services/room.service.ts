@@ -77,6 +77,11 @@ export function createRoom(hostName: string, userId?: string, avatar?: { emoji: 
       lastUpdated: Date.now(),
     },
 
+    locked: false,
+    lockedBy: "",
+
+    theme: "minimal", // Default theme
+
     createdAt: new Date(),
   };
 

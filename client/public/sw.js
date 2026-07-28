@@ -20,12 +20,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Bypass Service Worker for uploads and POST requests to preserve XHR upload progress events
-  if (event.request.method === 'POST' || event.request.url.includes('/upload')) {
+  // Bypass Service Worker for media files, socket.io connections, range requests, and uploads
+  if (
+    event.request.method === 'POST' ||
+    event.request.url.includes('/upload') ||
+    event.request.url.includes('/movies/') ||
+    event.request.url.includes('/socket.io') ||
+    event.request.headers.has('range')
+  ) {
     return;
   }
 
-  // Passthrough fetch for real-time streaming & Socket.IO
+  // Passthrough fetch for static content
   event.respondWith(
     fetch(event.request).catch(() => {
       return caches.match(event.request);

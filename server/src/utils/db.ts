@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 
 const DATA_DIR = process.env.VERCEL
   ? path.join("/tmp", "data")
@@ -26,9 +27,42 @@ export type HistoryRecord = {
   coWatchers?: string[];
 };
 
+export type LibraryRecord = {
+  id: string;
+  userId: string;
+  movieName: string;
+  originalFilename: string;
+  size: number;
+  mimeType: string;
+  moviePath: string;
+  audioTracks: any[];
+  subtitleTracks: any[];
+  uploadedAt: string;
+  ignored?: boolean;
+  hash?: string;
+  status?: "processing" | "ready";
+};
+
+export type ContinueWatchingRecord = {
+  id: string;
+  userId: string;
+  movieId: string; // library ID, youtube ID, or URL hash
+  movieTitle: string;
+  poster?: string;
+  duration: number;
+  currentPosition: number;
+  progressPercentage?: number;
+  timestamp: number;
+  lastRoomCode?: string;
+  isHost: boolean;
+  completed?: boolean;
+};
+
 type DbSchema = {
   users: UserRecord[];
   history: HistoryRecord[];
+  library: LibraryRecord[];
+  continueWatching: ContinueWatchingRecord[];
 };
 
 function ensureDbExists() {
@@ -40,6 +74,8 @@ function ensureDbExists() {
     const initialData: DbSchema = {
       users: [],
       history: [],
+      library: [],
+      continueWatching: [],
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), "utf8");
   }
@@ -49,10 +85,15 @@ async function readDb(): Promise<DbSchema> {
   ensureDbExists();
   try {
     const content = await fs.promises.readFile(DB_FILE, "utf8");
-    return JSON.parse(content) as DbSchema;
+    const db = JSON.parse(content) as DbSchema;
+    if (!db.library) db.library = [];
+    if (!db.history) db.history = [];
+    if (!db.users) db.users = [];
+    if (!db.continueWatching) db.continueWatching = [];
+    return db;
   } catch (err) {
     console.error("Error reading database file, returning default structure", err);
-    return { users: [], history: [] };
+    return { users: [], history: [], library: [], continueWatching: [] };
   }
 }
 
@@ -63,6 +104,11 @@ async function writeDb(data: DbSchema): Promise<void> {
   } catch (err) {
     console.error("Error writing to database file", err);
   }
+}
+
+export async function getAllUsers(): Promise<UserRecord[]> {
+  const db = await readDb();
+  return db.users;
 }
 
 export async function findUserByUsername(username: string): Promise<UserRecord | undefined> {
@@ -121,4 +167,127 @@ export async function updateUserAvatar(
     return user;
   }
   return undefined;
+}
+
+export async function getUserLibrary(userId: string): Promise<LibraryRecord[]> {
+  const db = await readDb();
+  return db.library
+    .filter(lib => lib.userId === userId)
+    .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+}
+
+export async function addMovieToLibrary(record: LibraryRecord): Promise<void> {
+  const db = await readDb();
+  db.library.push(record);
+  await writeDb(db);
+}
+
+export async function deleteMovieFromLibrary(id: string, userId: string): Promise<LibraryRecord | undefined> {
+  const db = await readDb();
+  const index = db.library.findIndex(lib => lib.id === id && lib.userId === userId);
+  if (index !== -1) {
+    const deleted = db.library.splice(index, 1)[0];
+    await writeDb(db);
+    return deleted;
+  }
+  return undefined;
+}
+
+export async function ignoreMovieFromLibrary(id: string, userId: string): Promise<LibraryRecord | undefined> {
+  const db = await readDb();
+  const record = db.library.find(lib => lib.id === id && lib.userId === userId);
+  if (record) {
+    record.ignored = true;
+    await writeDb(db);
+    return record;
+  }
+  return undefined;
+}
+
+export async function renameMovieInLibrary(id: string, userId: string, newName: string): Promise<LibraryRecord | undefined> {
+  const db = await readDb();
+  const record = db.library.find(lib => lib.id === id && lib.userId === userId);
+  if (record) {
+    record.movieName = newName;
+    await writeDb(db);
+    return record;
+  }
+  return undefined;
+}
+
+export async function getMovieFromLibrary(id: string): Promise<LibraryRecord | undefined> {
+  const db = await readDb();
+  return db.library.find(lib => lib.id === id);
+}
+
+export async function findMovieByHash(userId: string, hash: string): Promise<LibraryRecord | undefined> {
+  const db = await readDb();
+  return db.library.find(lib => lib.userId === userId && lib.hash === hash && !lib.ignored);
+}
+
+export async function updateLibraryRecordStatus(id: string, updates: Partial<LibraryRecord>): Promise<LibraryRecord | undefined> {
+  const db = await readDb();
+  const record = db.library.find(lib => lib.id === id);
+  if (record) {
+    Object.assign(record, updates);
+    await writeDb(db);
+    return record;
+  }
+  return undefined;
+}
+
+export async function getContinueWatchingList(userId: string): Promise<ContinueWatchingRecord[]> {
+  const db = await readDb();
+  return db.continueWatching
+    .filter(record => record.userId === userId)
+    .sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export async function saveContinueWatching(record: Omit<ContinueWatchingRecord, "id" | "timestamp">): Promise<ContinueWatchingRecord> {
+  const db = await readDb();
+  
+  let existingIndex = db.continueWatching.findIndex(
+    r => r.userId === record.userId && r.movieId === record.movieId
+  );
+  
+  const now = Date.now();
+  const progressPercentage = record.duration > 0 ? (record.currentPosition / record.duration) * 100 : 0;
+  const completed = progressPercentage >= 95;
+  
+  let finalRecord: ContinueWatchingRecord;
+  
+  if (existingIndex !== -1) {
+    finalRecord = {
+      ...db.continueWatching[existingIndex],
+      ...record,
+      progressPercentage,
+      completed,
+      timestamp: now,
+    };
+    db.continueWatching[existingIndex] = finalRecord;
+  } else {
+    finalRecord = {
+      ...record,
+      id: randomUUID(),
+      progressPercentage,
+      completed,
+      timestamp: now,
+    };
+    db.continueWatching.push(finalRecord);
+  }
+  
+  await writeDb(db);
+  return finalRecord;
+}
+
+export async function deleteContinueWatching(userId: string, id: string): Promise<boolean> {
+  const db = await readDb();
+  const initialLength = db.continueWatching.length;
+  db.continueWatching = db.continueWatching.filter(r => !(r.userId === userId && r.id === id));
+  
+  if (db.continueWatching.length !== initialLength) {
+    await writeDb(db);
+    return true;
+  }
+  return false;
 }

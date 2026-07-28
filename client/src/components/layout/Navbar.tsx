@@ -99,7 +99,7 @@ export default function Navbar() {
             />
           </Link>
 
-          {/* Right Action: Account & Install KrewPlay App */}
+            {/* Right Action: Account & Install KrewPlay App */}
           <div className="flex items-center gap-3">
             {/* Account Link */}
             <Link
@@ -110,6 +110,7 @@ export default function Navbar() {
               <span>{username || "Account"}</span>
             </Link>
 
+            <div className="hidden">
             {isStandalone ? (
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold tracking-wide shadow-sm">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -128,6 +129,7 @@ export default function Navbar() {
                 </span>
               </button>
             )}
+            </div>
           </div>
         </div>
       </nav>

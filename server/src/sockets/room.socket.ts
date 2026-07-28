@@ -55,6 +55,10 @@ export function registerRoomEvents(
 
       if (room) {
         socket.emit("player-state", room.player);
+        socket.emit("lock-state", {
+          locked: room.locked || false,
+          lockedBy: room.lockedBy || "",
+        });
       }
     }
   );
@@ -177,8 +181,6 @@ socket.on(
     });
   }
 );
-let controlsLocked = false;
-let lockedBy = "";
 socket.on(
   "toggle-lock",
   ({
@@ -188,21 +190,38 @@ socket.on(
     roomCode: string;
     participantName: string;
   }) => {
+    const room = getRoom(roomCode);
+    if (!room) return;
 
-    controlsLocked = !controlsLocked;
-
-    lockedBy = controlsLocked
-      ? participantName
-      : "";
+    room.locked = !room.locked;
+    room.lockedBy = room.locked ? participantName : "";
 
     io.to(roomCode).emit("lock-state", {
-      locked: controlsLocked,
-      lockedBy,
+      locked: room.locked,
+      lockedBy: room.lockedBy,
     });
-
   }
 );
 
+socket.on("host-changed-movie", ({ roomCode }: { roomCode: string }) => {
+  const room = getRoom(roomCode);
+  if (!room) return;
+  // Reset player state for the new movie
+  room.player = {
+    isPlaying: false,
+    currentTime: 0,
+    playbackRate: 1,
+    lastUpdated: Date.now(),
+  };
+  io.to(roomCode).emit("movie-changed");
+});
+
+socket.on("change-theme", ({ roomCode, theme }: { roomCode: string, theme: string }) => {
+  const room = getRoom(roomCode);
+  if (!room) return;
+  room.theme = theme;
+  io.to(roomCode).emit("theme-changed", theme);
+});
 
 socket.on("leave-room", ({ roomCode }) => {
   socket.leave(roomCode);
