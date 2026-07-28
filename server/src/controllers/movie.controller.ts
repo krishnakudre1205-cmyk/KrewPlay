@@ -678,7 +678,7 @@ export async function deleteContinueWatchingController(req: Request, res: Respon
       return res.status(400).json({ message: "userId and record id are required" });
     }
 
-    const success = await deleteContinueWatching(userId, id);
+    const success = await deleteContinueWatching(userId as string, id as string);
     if (success) {
       return res.status(200).json({ message: "Record deleted successfully" });
     } else {
