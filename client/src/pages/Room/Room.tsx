@@ -276,7 +276,7 @@ export default function Room() {
           console.log("[HLS] Manifest parsed, streams available.");
         });
         
-        hls.on(Hls.Events.ERROR, function (event, data) {
+        hls.on(Hls.Events.ERROR, function (_event, data) {
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
