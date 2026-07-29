@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KrewPlay</string>
+    <string name="title_activity_main">KrewPlay</string>
+    <string name="package_name">com.krishna.krewplay</string>
+    <string name="custom_url_scheme">com.krishna.krewplay</string>
+</resources>

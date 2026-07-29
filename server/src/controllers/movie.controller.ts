@@ -380,15 +380,22 @@ export async function selectLibraryMovieController(req: Request, res: Response) 
     return res.status(404).json({ message: "Movie not found in library" });
   }
 
-  if (!fs.existsSync(record.moviePath)) {
-    return res.status(404).json({ message: "Movie file is missing from disk" });
+  // Bypass local filesystem check for movies that are fully uploaded to Supabase
+  if (record.status !== "ready" && record.status !== "processing") {
+    return res.status(404).json({ message: "Movie is not ready for playback" });
   }
 
   room.moviePath = record.moviePath;
   room.movieName = record.movieName;
   room.movieSize = record.size;
   room.mimeType = record.mimeType;
-  room.movieUrl = undefined;
+  room.movieUrl = record.playlistUrl; // Overload movieUrl with playlistUrl for now or use dedicated field
+  
+  // Custom fields for Supabase HLS
+  (room as any).playlistUrl = record.playlistUrl;
+  (room as any).thumbnailUrl = record.thumbnailUrl;
+  room.duration = record.duration;
+
   room.audioTracks = record.audioTracks || [];
   room.subtitleTracks = record.subtitleTracks || [];
   room.selectedAudioTrackIndex = room.audioTracks.length > 0 ? room.audioTracks[0].index : undefined;

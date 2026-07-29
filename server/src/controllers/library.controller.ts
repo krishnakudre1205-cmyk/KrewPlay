@@ -14,7 +14,7 @@ import {
   updateLibraryRecordStatus
 } from "../utils/db";
 import { scanUserLibrary } from "../services/libraryScanner";
-import { extractMediaMetadataForLibrary } from "./movie.controller";
+import { processHLSAndUpload } from "../services/hls.service";
 
 const STORAGE_ROOT = path.join(process.cwd(), "storage", "movies");
 const TMP_ROOT = path.join(process.cwd(), "storage", "tmp");
@@ -131,49 +131,34 @@ export async function completeUploadController(req: Request, res: Response) {
       return res.status(409).json({ message: "This movie already exists in your library" });
     }
 
-    const ext = path.extname(upload.originalFilename);
-    const finalFilename = `${uploadId}${ext}`;
-    const finalPath = path.join(STORAGE_ROOT, userId, finalFilename);
-
-    fs.renameSync(upload.tempPath, finalPath);
-    activeUploads.delete(uploadId);
-
+    // Instead of moving to finalPath, we trigger HLS processing on the temp file.
+    // We will leave the file in tempPath; FFmpeg service deletes it when done.
+    
     const newRecord: LibraryRecord = {
       id: randomUUID(),
       userId,
       movieName: path.parse(upload.originalFilename).name,
       originalFilename: upload.originalFilename,
       size: upload.fileSize,
-      mimeType: `video/${ext.replace(".", "")}`, // fallback
-      moviePath: finalPath,
+      mimeType: `video/mp4`, 
+      moviePath: "", // Deprecated, but keeping structure intact
       audioTracks: [],
       subtitleTracks: [],
       uploadedAt: new Date().toISOString(),
       ignored: false,
       hash: finalHash,
-      status: "processing"
+      status: "processing",
+      processingPercentage: 0
     };
 
     await addMovieToLibrary(newRecord);
 
-    // Asynchronously process metadata to avoid blocking the response
-    (async () => {
-      try {
-        console.log(`[FFmpeg] Starting async metadata extraction for ${finalPath}`);
-        const { audioTracks, subtitleTracks } = await extractMediaMetadataForLibrary(finalPath);
-        await updateLibraryRecordStatus(newRecord.id, {
-          audioTracks,
-          subtitleTracks,
-          status: "ready"
-        });
-        console.log(`[FFmpeg] Finished async extraction for ${finalPath}`);
-      } catch (err) {
-        console.error(`[FFmpeg] Error extracting metadata async:`, err);
-        // Even if extraction fails, it's playable, just maybe lacking tracks
-        await updateLibraryRecordStatus(newRecord.id, { status: "ready" });
-      }
-    })();
+    // Asynchronously process HLS pipeline and upload to Supabase
+    processHLSAndUpload(newRecord.id, upload.tempPath, userId).catch(err => {
+      console.error("[HLS Pipeline Error]", err);
+    });
 
+    activeUploads.delete(uploadId);
     return res.json({ success: true, movie: newRecord });
   } catch (err) {
     console.error("Complete upload error:", err);
@@ -201,28 +186,17 @@ export async function deleteFromLibraryController(req: Request, res: Response) {
     return res.status(404).json({ message: "Movie not found" });
   }
 
+  // Also remove from Supabase Storage
   try {
-    if (fs.existsSync(deleted.moviePath)) {
-      fs.unlinkSync(deleted.moviePath);
-    }
-    // Delete associated thumbnail and cached poster
-    const thumbPath = `${deleted.moviePath}_thumb.jpg`;
-    if (fs.existsSync(thumbPath)) {
-      fs.unlinkSync(thumbPath);
-    }
-    const posterPath = `${deleted.moviePath}_poster.jpg`;
-    if (fs.existsSync(posterPath)) {
-      fs.unlinkSync(posterPath);
-    }
-    // Delete associated subtitles
-    for (const track of deleted.subtitleTracks || []) {
-      const vttPath = `${deleted.moviePath}_track_${track.index}.vtt`;
-      if (fs.existsSync(vttPath)) {
-        fs.unlinkSync(vttPath);
-      }
+    const { supabase } = await import("../services/supabase");
+    // List all files in the movie folder
+    const { data: files } = await supabase.storage.from("movies").list(id);
+    if (files && files.length > 0) {
+      const filePaths = files.map(f => `${id}/${f.name}`);
+      await supabase.storage.from("movies").remove(filePaths);
     }
   } catch (err) {
-    console.error("Error deleting movie files:", err);
+    console.error("Error deleting movie from Supabase:", err);
   }
 
   return res.json({ success: true, deletedId: id, permanent: true });

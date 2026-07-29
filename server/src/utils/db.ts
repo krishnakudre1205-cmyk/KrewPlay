@@ -41,6 +41,10 @@ export type LibraryRecord = {
   ignored?: boolean;
   hash?: string;
   status?: "processing" | "ready";
+  playlistUrl?: string;
+  thumbnailUrl?: string;
+  processingPercentage?: number;
+  duration?: number;
 };
 
 export type ContinueWatchingRecord = {

@@ -31,7 +31,10 @@ interface LibraryEntry {
   originalFilename: string;
   size: number;
   uploadedAt: string;
+  subtitleTracks?: any[];
+  hash?: string;
   status?: "processing" | "ready";
+  processingPercentage?: number;
 }
 
 export default function Host() {
@@ -154,15 +157,29 @@ export default function Host() {
     }
   };
 
-  // Poll library to check if any processing movies are done
   useEffect(() => {
-    if (streamMode === "library" && library.some(m => m.status === "processing")) {
-      const interval = setInterval(() => {
-        fetchLibrary();
-      }, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [streamMode, library, userId]);
+    socket.on("library-updated", () => {
+      fetchLibrary();
+    });
+
+    socket.on("processing-progress", (data: { movieId: string, percentage: number }) => {
+      setLibrary(prev => prev.map(m => 
+        m.id === data.movieId ? { ...m, processingPercentage: data.percentage, status: "processing" } : m
+      ));
+    });
+
+    socket.on("processing-complete", (data: { movieId: string, playlistUrl: string }) => {
+      setLibrary(prev => prev.map(m => 
+        m.id === data.movieId ? { ...m, processingPercentage: 100, status: "ready" } : m
+      ));
+    });
+
+    return () => {
+      socket.off("library-updated");
+      socket.off("processing-progress");
+      socket.off("processing-complete");
+    };
+  }, [userId]);
 
   function formatBytes(bytes: number) {
     if (bytes === 0) return "0 MB";
@@ -685,7 +702,7 @@ export default function Host() {
                               {movie.status === "processing" && (
                                 <>
                                   <span>•</span>
-                                  <span className="text-amber-400 font-semibold animate-pulse">Processing metadata...</span>
+                                  <span className="text-amber-400 font-semibold animate-pulse">Generating HLS: {movie.processingPercentage || 0}%</span>
                                 </>
                               )}
                             </div>

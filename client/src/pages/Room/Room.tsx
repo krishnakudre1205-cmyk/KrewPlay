@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import Hls from "hls.js";
 import { toast } from "react-hot-toast";
 import { useParams, useNavigate } from "react-router-dom";
 import { socket } from "../../services/socket";
@@ -250,6 +251,58 @@ export default function Room() {
         setLoadingDetails(false);
       });
   }, [id, roomData?.movieName]);
+
+  // HLS.js Integration
+  useEffect(() => {
+    if (!videoRef.current || !streamUrl) return;
+
+    let hls: Hls | null = null;
+
+    if (streamUrl.includes(".m3u8")) {
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          startPosition: -1,
+          capLevelToPlayerSize: true,
+        });
+        hls.loadSource(streamUrl);
+        hls.attachMedia(videoRef.current);
+        
+        hls.on(Hls.Events.MANIFEST_PARSED, function () {
+          console.log("[HLS] Manifest parsed, streams available.");
+        });
+        
+        hls.on(Hls.Events.ERROR, function (event, data) {
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.error("fatal network error encountered, try to recover");
+                hls?.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.error("fatal media error encountered, try to recover");
+                hls?.recoverMediaError();
+                break;
+              default:
+                hls?.destroy();
+                break;
+            }
+          }
+        });
+      } else if (videoRef.current.canPlayType("application/vnd.apple.mpegurl")) {
+        // Fallback for Safari (native HLS support)
+        videoRef.current.src = streamUrl;
+      }
+    } else {
+      // Standard mp4 fallback
+      videoRef.current.src = streamUrl;
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [streamUrl]);
 
   const lastSavedPosition = useRef<number>(0);
   const [hasToastedCw, setHasToastedCw] = useState<Record<string, boolean>>({});
@@ -1069,7 +1122,6 @@ export default function Room() {
                   ref={videoRef}
                   controls={showControls && !locked}
                   className="w-full h-full object-contain"
-                  src={streamUrl}
                   onPlay={handlePlay}
                   onPause={handlePause}
                   onSeeked={handleSeek}
