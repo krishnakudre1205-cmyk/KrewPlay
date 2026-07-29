@@ -32,11 +32,18 @@ export async function processHLSAndUpload(
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const masterPlaylistPath = path.join(outputDir, "master.m3u8");
-  const thumbnailPath = path.join(outputDir, "thumbnail.jpg");
+  const io = getIo();
+  const emitProgress = (percentage: number) => {
+    if (io) io.to(`library_${userId}`).emit("processing-progress", { movieId, percentage });
+  };
+  const emitComplete = (playlistUrl: string) => {
+    if (io) io.to(`library_${userId}`).emit("processing-complete", { movieId, playlistUrl });
+  };
 
-  // First, extract a thumbnail
-  await new Promise<void>((resolve, reject) => {
+  emitProgress(5); // Reading Video Information
+
+  // 1. Extract thumbnail
+  await new Promise<void>((resolve) => {
     ffmpeg(localFilePath)
       .screenshots({
         timestamps: ["00:00:05.000"],
@@ -45,21 +52,114 @@ export async function processHLSAndUpload(
         size: "320x240"
       })
       .on("end", () => resolve())
-      .on("error", (err) => resolve()); // Ignore error and continue
+      .on("error", () => resolve());
   });
 
-  // Extract duration
-  const duration: number = await new Promise((resolve) => {
+  // 2. Extract metadata
+  const metadata: any = await new Promise((resolve) => {
     ffmpeg.ffprobe(localFilePath, (err, metadata) => {
-      if (err) return resolve(0);
-      resolve(metadata.format.duration || 0);
+      if (err) return resolve({ duration: 0, size: 0 });
+      resolve({
+        duration: metadata.format.duration || 0,
+        size: metadata.format.size || 0
+      });
     });
   });
 
+  const duration = metadata.duration;
+  const sizeMB = metadata.size / (1024 * 1024);
+  const isSmall = sizeMB < 100;
+  
+  emitProgress(20); // Preparing Movie
+
+  let finalUrl = "";
+
+  if (isSmall) {
+    console.log(`[FFmpeg] Small file detected (${sizeMB.toFixed(2)}MB). Using fast-path direct upload.`);
+    // Fast path: upload original mp4 directly
+    const remotePath = `${movieId}/original.mp4`;
+    await uploadFileToSupabase(localFilePath, remotePath, "video/mp4");
+    
+    const { data: publicUrlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(remotePath);
+      
+    finalUrl = publicUrlData.publicUrl;
+  } else {
+    console.log(`[FFmpeg] Large file detected (${sizeMB.toFixed(2)}MB). Generating 720p fast-path HLS.`);
+    // Fast path: generate single 720p stream
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(localFilePath)
+        .outputOptions([
+          "-map 0:v:0",
+          "-map 0:a:0?",
+          "-c:v libx264",
+          "-b:v 2800k",
+          "-c:a aac",
+          "-b:a 128k",
+          "-filter:v scale=1280:720",
+          "-f hls",
+          "-hls_time 6",
+          "-hls_playlist_type vod",
+          "-hls_segment_filename", path.join(outputDir, "fast_stream_%03d.ts")
+        ])
+        .output(path.join(outputDir, "fast_stream.m3u8"))
+        .on("progress", (progress) => {
+          if (progress.percent) emitProgress(20 + Math.round(progress.percent * 0.7));
+        })
+        .on("end", () => resolve())
+        .on("error", (err) => reject(err))
+        .run();
+    });
+
+    // Upload fast stream files
+    const files = fs.readdirSync(outputDir).filter(f => f.includes("fast_stream"));
+    for (const file of files) {
+      let contentType = "application/octet-stream";
+      if (file.endsWith(".m3u8")) contentType = "application/vnd.apple.mpegurl";
+      if (file.endsWith(".ts")) contentType = "video/MP2T";
+      await uploadFileToSupabase(path.join(outputDir, file), `${movieId}/${file}`, contentType);
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(`${movieId}/fast_stream.m3u8`);
+    
+    finalUrl = publicUrlData.publicUrl;
+  }
+
+  // Upload thumbnail
+  await uploadFileToSupabase(path.join(outputDir, "thumbnail.jpg"), `${movieId}/thumbnail.jpg`, "image/jpeg");
+  const { data: thumbUrlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(`${movieId}/thumbnail.jpg`);
+
+  // Update DB and emit ready
+  await updateLibraryRecordStatus(movieId, {
+    status: "ready",
+    processingPercentage: 100,
+    playlistUrl: finalUrl,
+    thumbnailUrl: thumbUrlData.publicUrl,
+    duration: duration,
+    optimizationStatus: "optimizing"
+  });
+
+  emitComplete(finalUrl);
+  console.log(`[FFmpeg] Fast-path complete for ${movieId}. Movie is playable.`);
+
+  // PHASE 2: Background Optimization (Generate full adaptive HLS)
+  runBackgroundOptimization(movieId, localFilePath, userId, outputDir).catch(err => {
+    console.error(`[Background] Optimization failed for ${movieId}:`, err);
+  });
+}
+
+async function runBackgroundOptimization(movieId: string, localFilePath: string, userId: string, outputDir: string) {
+  console.log(`[Background] Starting full adaptive HLS optimization for ${movieId}`);
+  const io = getIo();
+  const emitOptimizing = (percentage: number) => {
+    if (io) io.to(`library_${userId}`).emit("optimizing-progress", { movieId, percentage });
+  };
+
   const command = ffmpeg(localFilePath);
   
-  // Generating just 720p for fast processing to avoid 30min Railway timeouts, but prompt requires 1080p, 720p, 480p, 360p, 240p
-  // To keep processing fast enough for this execution, I will output a single HLS stream instead of 5 multiplexed streams if we want it to finish quickly, but I must follow instructions:
   const resolutions = [
     { name: "1080p", scale: "1920:1080", bitrate: "5000k" },
     { name: "720p", scale: "1280:720", bitrate: "2800k" },
@@ -81,86 +181,54 @@ export async function processHLSAndUpload(
       ]);
   });
 
-  command
-    .outputOptions([
-      "-f hls",
-      "-hls_time 6", 
-      "-hls_playlist_type vod",
-      "-hls_segment_filename", path.join(outputDir, "v%v_stream_%03d.ts"),
-      "-master_pl_name master.m3u8",
-      `-var_stream_map`, `v:0,a:0 v:1,a:1 v:2,a:2 v:3,a:3 v:4,a:4` 
-    ])
-    .output(path.join(outputDir, "v%v_stream.m3u8"))
-    .on("progress", async (progress) => {
-      if (progress.percent) {
-        const perc = Math.min(Math.round(progress.percent), 99);
-        await updateLibraryRecordStatus(movieId, { processingPercentage: perc });
-        const io = getIo();
-        if (io) {
-          io.to(`library_${userId}`).emit("processing-progress", {
-            movieId,
-            percentage: perc
-          });
+  await new Promise<void>((resolve, reject) => {
+    command
+      .outputOptions([
+        "-f hls",
+        "-hls_time 6", 
+        "-hls_playlist_type vod",
+        "-hls_segment_filename", path.join(outputDir, "v%v_stream_%03d.ts"),
+        "-master_pl_name master.m3u8",
+        `-var_stream_map`, `v:0,a:0 v:1,a:1 v:2,a:2 v:3,a:3 v:4,a:4` 
+      ])
+      .output(path.join(outputDir, "v%v_stream.m3u8"))
+      .on("progress", (progress) => {
+        if (progress.percent) {
+          emitOptimizing(Math.min(Math.round(progress.percent), 99));
         }
-      }
-    })
-    .on("end", async () => {
-      console.log(`[FFmpeg] Finished HLS generation for ${movieId}. Starting upload to Supabase...`);
-      
-      try {
-        const files = fs.readdirSync(outputDir);
-        for (const file of files) {
-          const filePath = path.join(outputDir, file);
-          let contentType = "application/octet-stream";
-          if (file.endsWith(".m3u8")) contentType = "application/vnd.apple.mpegurl";
-          if (file.endsWith(".ts")) contentType = "video/MP2T";
-          if (file.endsWith(".jpg")) contentType = "image/jpeg";
-          
-          await uploadFileToSupabase(filePath, `${movieId}/${file}`, contentType);
-        }
+      })
+      .on("end", () => resolve())
+      .on("error", (err) => reject(err))
+      .run();
+  });
 
-        const { data: publicUrlData } = supabase.storage
-          .from(BUCKET_NAME)
-          .getPublicUrl(`${movieId}/master.m3u8`);
+  // Upload optimized files
+  const files = fs.readdirSync(outputDir).filter(f => !f.includes("fast_stream") && !f.includes("thumbnail"));
+  for (const file of files) {
+    let contentType = "application/octet-stream";
+    if (file.endsWith(".m3u8")) contentType = "application/vnd.apple.mpegurl";
+    if (file.endsWith(".ts")) contentType = "video/MP2T";
+    await uploadFileToSupabase(path.join(outputDir, file), `${movieId}/${file}`, contentType);
+  }
 
-        const { data: thumbUrlData } = supabase.storage
-          .from(BUCKET_NAME)
-          .getPublicUrl(`${movieId}/thumbnail.jpg`);
+  const { data: publicUrlData } = supabase.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(`${movieId}/master.m3u8`);
 
-        await updateLibraryRecordStatus(movieId, { 
-          status: "ready", 
-          processingPercentage: 100,
-          playlistUrl: publicUrlData.publicUrl,
-          thumbnailUrl: thumbUrlData.publicUrl,
-          duration: duration
-        });
+  // Update DB to optimized playlist
+  await updateLibraryRecordStatus(movieId, {
+    playlistUrl: publicUrlData.publicUrl,
+    optimizationStatus: "completed"
+  });
 
-        const io = getIo();
-        if (io) {
-          io.to(`library_${userId}`).emit("processing-complete", {
-            movieId,
-            percentage: 100,
-            playlistUrl: publicUrlData.publicUrl
-          });
-        }
-
-      } catch (err) {
-        console.error("Failed to upload HLS to Supabase", err);
-      } finally {
-        fs.rmSync(outputDir, { recursive: true, force: true });
-        if (fs.existsSync(localFilePath)) {
-          fs.unlinkSync(localFilePath);
-        }
-      }
-    })
-    .on("error", (err) => {
-      console.error(`[FFmpeg] Error generating HLS for ${movieId}:`, err);
-      fs.rmSync(outputDir, { recursive: true, force: true });
-      if (fs.existsSync(localFilePath)) {
-        fs.unlinkSync(localFilePath);
-      }
-    });
-
-  console.log(`[FFmpeg] Starting HLS generation pipeline for ${movieId}`);
-  command.run();
+  if (io) io.to(`library_${userId}`).emit("optimizing-progress", { movieId, percentage: 100 });
+  
+  console.log(`[Background] Full optimization complete for ${movieId}`);
+  
+  // Clean up
+  fs.rmSync(outputDir, { recursive: true, force: true });
+  if (fs.existsSync(localFilePath)) {
+    fs.unlinkSync(localFilePath);
+  }
 }
+

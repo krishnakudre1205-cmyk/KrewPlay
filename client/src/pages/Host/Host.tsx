@@ -35,6 +35,7 @@ interface LibraryEntry {
   hash?: string;
   status?: "processing" | "ready";
   processingPercentage?: number;
+  optimizationStatus?: "idle" | "optimizing" | "completed";
 }
 
 export default function Host() {
@@ -174,10 +175,17 @@ export default function Host() {
       ));
     });
 
+    socket.on("optimizing-progress", (data: { movieId: string, percentage: number }) => {
+      setLibrary(prev => prev.map(m => 
+        m.id === data.movieId ? { ...m, optimizationStatus: data.percentage < 100 ? "optimizing" : "completed", processingPercentage: data.percentage } : m
+      ));
+    });
+
     return () => {
       socket.off("library-updated");
       socket.off("processing-progress");
       socket.off("processing-complete");
+      socket.off("optimizing-progress");
     };
   }, [userId]);
 
@@ -702,7 +710,26 @@ export default function Host() {
                               {movie.status === "processing" && (
                                 <>
                                   <span>•</span>
-                                  <span className="text-amber-400 font-semibold animate-pulse">Generating HLS: {movie.processingPercentage || 0}%</span>
+                                  <span className="text-amber-400 font-semibold animate-pulse">
+                                    {movie.processingPercentage === 5 ? "Reading Video Information..." : 
+                                     movie.processingPercentage === 20 ? "Preparing Movie..." : 
+                                     `Preparing Movie: ${movie.processingPercentage}%`}
+                                  </span>
+                                </>
+                              )}
+                              {movie.status === "ready" && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-emerald-400 font-bold">Ready to Watch</span>
+                                  {movie.optimizationStatus === "optimizing" && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-lavender-200/60 font-semibold animate-pulse flex items-center gap-1">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        Optimizing Additional Qualities (Background): {movie.processingPercentage || 0}%
+                                      </span>
+                                    </>
+                                  )}
                                 </>
                               )}
                             </div>

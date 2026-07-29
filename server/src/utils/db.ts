@@ -45,6 +45,7 @@ export type LibraryRecord = {
   thumbnailUrl?: string;
   processingPercentage?: number;
   duration?: number;
+  optimizationStatus?: "idle" | "optimizing" | "completed";
 };
 
 export type ContinueWatchingRecord = {
