@@ -109,58 +109,33 @@
       "watchedAt": "2026-07-27T16:02:02.429Z",
       "isHost": true,
       "coWatchers": []
+    },
+    {
+      "id": "6681c976-1989-48fa-bb02-cb7a5cc83452",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "video_20260729_122428",
+      "filename": "",
+      "watchedAt": "2026-07-29T17:27:58.231Z",
+      "isHost": true,
+      "coWatchers": []
     }
   ],
   "library": [
     {
-      "id": "23f389a6-51c6-40b6-84e6-a0b57ad5d248",
+      "id": "3944d90b-ef99-435a-9927-6d8228ed2dc5",
       "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
-      "movieName": "1784997540743-1000256000",
-      "originalFilename": "1784997540743-1000256000.mp4",
-      "size": 47726235,
+      "movieName": "video_20260729_122428",
+      "originalFilename": "video_20260729_122428.mp4",
+      "size": 7024579,
       "mimeType": "video/mp4",
-      "moviePath": "C:\\Users\\Krishna\\OneDrive\\Desktop\\KrewPlay\\server\\storage\\movies\\fb116140-cc1a-46c2-981c-1719ffbb2a72\\3ed06a1d-83fd-427e-b83e-6b670dedc89b.mp4",
-      "audioTracks": [
-        {
-          "index": 1,
-          "language": "eng",
-          "title": "Track 1 (ENG) [AAC]",
-          "codec": "aac"
-        }
-      ],
+      "moviePath": "",
+      "audioTracks": [],
       "subtitleTracks": [],
-      "uploadedAt": "2026-07-27T15:25:23.577Z",
+      "uploadedAt": "2026-07-29T18:06:01.396Z",
       "ignored": false,
-      "hash": "8ac4ef76810c684ad4835d30b02063f6d5cf5fbaf49eaa4bb3e57b2e8a6b291b",
-      "status": "ready"
-    },
-    {
-      "id": "930cea41-74cf-451f-bac9-aa1d89124468",
-      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
-      "movieName": "Off.Campus.S01E05.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms",
-      "originalFilename": "Off.Campus.S01E05.720p.10Bit.WEB-DL.Hindi.5.1-English.HEVC.x265-HDHub4u.Ms.mkv",
-      "size": 344182370,
-      "mimeType": "video/mkv",
-      "moviePath": "C:\\Users\\Krishna\\OneDrive\\Desktop\\KrewPlay\\server\\storage\\movies\\fb116140-cc1a-46c2-981c-1719ffbb2a72\\2bd794cb-63da-4d25-9c47-7ba7be49118b.mkv",
-      "audioTracks": [
-        {
-          "index": 1,
-          "language": "hin",
-          "title": "HDHub4u.Ag (HIN) [AAC]",
-          "codec": "aac"
-        },
-        {
-          "index": 2,
-          "language": "eng",
-          "title": "HDHub4u.Ag (ENG) [AAC]",
-          "codec": "aac"
-        }
-      ],
-      "subtitleTracks": [],
-      "uploadedAt": "2026-07-27T16:01:33.678Z",
-      "ignored": false,
-      "hash": "23ff9e11ff197c51e10d4050fde6de1522eee7055d5a61bd4d26214c5f7ad5ee",
-      "status": "ready"
+      "hash": "b8678e7c1032608138dc385b154c2138f13f99c02b3aa91cbd1329acebd2b430",
+      "status": "processing",
+      "processingPercentage": 0
     }
   ],
   "continueWatching": []

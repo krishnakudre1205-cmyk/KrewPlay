@@ -6,132 +6,7 @@ import { getRoom } from "../services/room.service";
 import { saveHistory, getContinueWatchingList, saveContinueWatching, deleteContinueWatching } from "../utils/db";
 import { randomUUID } from "crypto";
 import path from "path";
-import ffmpeg from "fluent-ffmpeg";
-// @ts-ignore
-import ffmpegPath from "ffmpeg-static";
-// @ts-ignore
-import ffprobeStatic from "ffprobe-static";
-
-// Configure FFmpeg static paths
-if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath);
-if (ffprobeStatic.path) ffmpeg.setFfprobePath(ffprobeStatic.path);
-
-// Helper functions for metadata extraction
-function probeFile(filePath: string): Promise<ffmpeg.FfprobeData> {
-  return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(filePath, (err, data) => {
-      if (err) reject(err);
-      else resolve(data);
-    });
-  });
-}
-
-function extractSubtitle(moviePath: string, streamIndex: number, outputPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    ffmpeg(moviePath)
-      .map(`0:${streamIndex}`)
-      .output(outputPath)
-      .on("end", () => {
-        console.log(`Extracted subtitle track ${streamIndex} to ${outputPath}`);
-        resolve();
-      })
-      .on("error", (err) => {
-        console.error(`Error extracting subtitle track ${streamIndex}:`, err);
-        reject(err);
-      })
-      .run();
-  });
-}
-
-function extractMovieThumbnail(moviePath: string, outputPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    ffmpeg(moviePath)
-      .screenshots({
-        timestamps: ["5%"],
-        filename: path.basename(outputPath),
-        folder: path.dirname(outputPath),
-        size: "854x?"
-      })
-      .on("end", () => {
-        resolve();
-      })
-      .on("error", (err) => {
-        console.warn(`Failed to extract thumbnail:`, err.message);
-        reject(err);
-      });
-  });
-}
-
-export async function extractMediaMetadataForLibrary(moviePath: string): Promise<{ audioTracks: any[]; subtitleTracks: any[] }> {
-  if (!moviePath) return { audioTracks: [], subtitleTracks: [] };
-
-  try {
-    const thumbPath = `${moviePath}_thumb.jpg`;
-    try {
-      if (!fs.existsSync(thumbPath)) {
-        await extractMovieThumbnail(moviePath, thumbPath);
-        console.log(`[FFmpeg] Extracted thumbnail for: ${moviePath}`);
-      }
-    } catch (err) {
-      console.warn(`[FFmpeg] Skipping thumbnail generation:`, err);
-    }
-
-    const metadata = await probeFile(moviePath);
-    const audioTracks: any[] = [];
-    const subtitleTracks: any[] = [];
-
-    for (const s of metadata.streams) {
-      if (s.codec_type === "audio") {
-        const title = s.tags?.title || s.tags?.TITLE || `Track ${audioTracks.length + 1}`;
-        const lang = s.tags?.language || s.tags?.LANGUAGE || "und";
-        audioTracks.push({
-          index: s.index,
-          language: lang,
-          title: `${title} (${lang.toUpperCase()}) [${s.codec_name?.toUpperCase()}]`,
-          codec: s.codec_name,
-        });
-      } else if (s.codec_type === "subtitle") {
-        const title = s.tags?.title || s.tags?.TITLE || `Track ${subtitleTracks.length + 1}`;
-        const lang = s.tags?.language || s.tags?.LANGUAGE || "und";
-
-        const outputPath = `${moviePath}_track_${s.index}.vtt`;
-
-        try {
-          if (!fs.existsSync(outputPath)) {
-            await extractSubtitle(moviePath, s.index, outputPath);
-          }
-          subtitleTracks.push({
-            index: s.index,
-            language: lang,
-            title: `${title} (${lang.toUpperCase()}) [${s.codec_name?.toUpperCase()}]`,
-            codec: s.codec_name,
-          });
-        } catch (err) {
-          console.warn(`Skipping subtitle stream index ${s.index} due to extraction incompatibility:`, err);
-        }
-      }
-    }
-
-    return { audioTracks, subtitleTracks };
-  } catch (err) {
-    console.error("Error extracting media metadata:", err);
-    return { audioTracks: [], subtitleTracks: [] };
-  }
-}
-
-export async function extractMediaMetadata(room: any) {
-  if (!room.moviePath) return;
-
-  try {
-    const { audioTracks, subtitleTracks } = await extractMediaMetadataForLibrary(room.moviePath);
-    room.audioTracks = audioTracks;
-    room.subtitleTracks = subtitleTracks;
-    room.selectedAudioTrackIndex = audioTracks.length > 0 ? audioTracks[0].index : undefined;
-    console.log(`Media Metadata Probed for ${room.movieName}: ${audioTracks.length} audio tracks, ${subtitleTracks.length} subtitle tracks`);
-  } catch (err) {
-    console.error("Error extracting media metadata:", err);
-  }
-}
+// FFmpeg logic removed to match kk-cine architecture
 
 export async function uploadMovieController(req: Request, res: Response) {
   const { code } = req.params;
@@ -155,8 +30,7 @@ export async function uploadMovieController(req: Request, res: Response) {
   room.movieSize = req.file.size;
   room.mimeType = req.file.mimetype;
 
-  // Probe metadata & extract subtitles WebVTTs
-  await extractMediaMetadata(room);
+  // Probe metadata & extract subtitles WebVTTs removed
 
   // Record history for any connected participants with a user ID
   if (room.participants && room.moviePath) {
@@ -186,8 +60,6 @@ export async function uploadMovieController(req: Request, res: Response) {
       name: room.movieName,
       size: room.movieSize,
       type: room.mimeType,
-      audioTracks: room.audioTracks,
-      subtitleTracks: room.subtitleTracks,
     },
   });
 }
@@ -209,110 +81,105 @@ export function serveSubtitleController(req: Request, res: Response) {
   return res.sendFile(vttPath);
 }
 
-export function streamMovieController(req: Request, res: Response) {
+import axios from "axios";
+
+export async function streamMovieController(req: Request, res: Response) {
   const { code } = req.params;
-  const audioTrackQuery = req.query.audioTrack;
 
   const room = getRoom(code as string);
 
   if (!room) {
-    return res.status(404).json({
-      message: "Movie not found",
-    });
+    return res.status(404).json({ message: "Movie not found" });
   }
 
-  if (room.movieUrl) {
-    return res.redirect(room.movieUrl);
+  // If the movie is available via URL (Supabase Fast-Path or HLS master)
+  const targetUrl = room.movieUrl;
+
+  if (!targetUrl && !room.moviePath) {
+    return res.status(404).json({ message: "Movie file missing" });
   }
 
-  if (!room.moviePath) {
-    return res.status(404).json({
-      message: "Movie not found",
-    });
+  // HLS URLs (.m3u8) don't need range request proxying for the master playlist, 
+  // they can be redirected, OR we proxy everything. The prompt states to optimize Range Streaming
+  // for "browser-compatible videos" (MP4). If it's an m3u8, we should probably just redirect.
+  if (targetUrl && targetUrl.includes('.m3u8')) {
+    return res.redirect(targetUrl);
   }
 
-  const moviePath = room.moviePath;
+  try {
+    if (targetUrl) {
+      // Proxy streaming from Supabase/External URL
+      const range = req.headers.range;
+      const headers: any = {};
+      if (range) {
+        headers['Range'] = range;
+      }
 
-  if (!fs.existsSync(moviePath)) {
-    return res.status(404).json({
-      message: "Movie file missing",
-    });
-  }
-
-  // Check if a non-default audio track is active
-  const selectedAudioTrack = audioTrackQuery ? parseInt(audioTrackQuery as string) : undefined;
-  const defaultAudioTrack = room.audioTracks && room.audioTracks.length > 0 ? room.audioTracks[0].index : undefined;
-
-  const shouldTranscode = selectedAudioTrack !== undefined &&
-    defaultAudioTrack !== undefined &&
-    selectedAudioTrack !== defaultAudioTrack;
-
-  if (shouldTranscode) {
-    console.log(`Dynamic audio transcoding active: mapping audio track index ${selectedAudioTrack}`);
-
-    res.writeHead(200, {
-      "Content-Type": "video/mp4",
-      "Transfer-Encoding": "chunked"
-    });
-
-    const command = ffmpeg(moviePath)
-      .map("0:v:0")
-      .map(`0:${selectedAudioTrack}`)
-      .videoCodec("copy")
-      .audioCodec("aac")
-      .audioChannels(2)
-      .outputFormat("mp4")
-      .outputOptions([
-        "-movflags frag_keyframe+empty_moov+default_base_moof",
-        "-frag_duration 2000000"
-      ])
-      .on("error", (err) => {
-        if (err.message.includes("pipe") || err.message.includes("Output stream closed")) {
-          return;
-        }
-        console.error("FFmpeg stream error:", err.message);
+      const response = await axios.get(targetUrl, {
+        responseType: 'stream',
+        headers: headers,
+        validateStatus: (status) => status < 400 // Accept 200 and 206
       });
 
-    command.pipe(res, { end: true });
+      // Forward headers from Supabase
+      const responseHeaders = response.headers;
+      if (responseHeaders['content-type']) res.setHeader('Content-Type', responseHeaders['content-type'] as string);
+      if (responseHeaders['content-length']) res.setHeader('Content-Length', responseHeaders['content-length'] as string);
+      if (responseHeaders['content-range']) res.setHeader('Content-Range', responseHeaders['content-range'] as string);
+      if (responseHeaders['accept-ranges']) res.setHeader('Accept-Ranges', responseHeaders['accept-ranges'] as string);
 
-    req.on("close", () => {
-      try {
-        command.kill("SIGKILL");
-      } catch (err) { }
-    });
-    return;
-  }
+      res.status(response.status);
+      response.data.pipe(res);
+      
+      req.on('close', () => {
+        response.data.destroy(); // Prevent memory leaks if client disconnects
+      });
+      return;
+    }
 
-  // Serve static file range
-  const stat = fs.statSync(moviePath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
-  const mimeType = room.mimeType || "video/mp4";
+    // Fallback: Serve local file (for processing / temp files)
+    const moviePath = room.moviePath!;
+    if (!fs.existsSync(moviePath)) {
+      return res.status(404).json({ message: "Movie file missing" });
+    }
 
-  if (!range) {
-    res.writeHead(200, {
-      "Content-Length": fileSize,
+    const stat = fs.statSync(moviePath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+    const mimeType = room.mimeType || "video/mp4";
+
+    if (!range) {
+      res.writeHead(200, {
+        "Content-Length": fileSize,
+        "Content-Type": mimeType,
+      });
+
+      fs.createReadStream(moviePath).pipe(res);
+      return;
+    }
+
+    const start = Number(range.replace(/\D/g, ""));
+    const end = Math.min(start + 1024 * 1024, fileSize - 1);
+
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": end - start + 1,
       "Content-Type": mimeType,
     });
 
-    fs.createReadStream(moviePath).pipe(res);
-    return;
+    const stream = fs.createReadStream(moviePath, { start, end });
+    stream.pipe(res);
+    
+    req.on('close', () => {
+      stream.destroy();
+    });
+  } catch (err) {
+    console.error("Streaming error:", err);
+    if (!res.headersSent) {
+      res.status(500).end();
+    }
   }
-
-  const start = Number(range.replace(/\D/g, ""));
-  const end = Math.min(start + 1024 * 1024, fileSize - 1);
-
-  res.writeHead(206, {
-    "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-    "Accept-Ranges": "bytes",
-    "Content-Length": end - start + 1,
-    "Content-Type": mimeType,
-  });
-
-  fs.createReadStream(moviePath, {
-    start,
-    end,
-  }).pipe(res);
 }
 
 export async function setMovieUrlController(req: Request, res: Response) {

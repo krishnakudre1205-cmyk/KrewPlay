@@ -22,6 +22,7 @@
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.1.1",
+    "axios": "^1.19.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",

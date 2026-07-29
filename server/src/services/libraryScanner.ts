@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { getAllUsers, getUserLibrary, addMovieToLibrary, deleteMovieFromLibrary, LibraryRecord } from "../utils/db";
-import { extractMediaMetadataForLibrary } from "../controllers/movie.controller";
+// Removed extractMediaMetadataForLibrary import
 
 const STORAGE_ROOT = path.join(process.cwd(), "storage", "movies");
 
@@ -42,7 +42,8 @@ export async function scanUserLibrary(userId: string): Promise<void> {
       console.log(`[Scanner] Found new movie for user ${userId}: ${file}`);
 
       try {
-        const { audioTracks, subtitleTracks } = await extractMediaMetadataForLibrary(fullPath);
+        const audioTracks: any[] = [];
+        const subtitleTracks: any[] = [];
 
         const newRecord: LibraryRecord = {
           id: randomUUID(),

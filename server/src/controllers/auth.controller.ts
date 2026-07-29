@@ -10,7 +10,7 @@ import {
   UserRecord
 } from "../utils/db";
 import { createRoom, getRoom } from "../services/room.service";
-import { extractMediaMetadata } from "./movie.controller";
+// Removed extractMediaMetadata import
 import path from "path";
 import fs from "fs";
 
@@ -148,8 +148,7 @@ export async function recreateRoomController(req: Request, res: Response) {
     else if (ext === ".avi") room.mimeType = "video/x-msvideo";
     else room.mimeType = "video/mp4";
 
-    // Extract subtitles & audio tracks metadata for the restored session
-    await extractMediaMetadata(room);
+    // Subtitles & audio tracks metadata extraction removed
 
     return res.json({
       success: true,

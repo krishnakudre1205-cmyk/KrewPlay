@@ -194,9 +194,11 @@ export default function Room() {
     toast.success("Theme changed!", { icon: "🎨" });
   }
 
-  // Derive streamUrl based on selectedAudio track parameter
-  const streamUrl = roomData?.movieUrl
-    ? roomData.movieUrl
+  // Derive streamUrl based on selectedAudio track parameter and HLS detection
+  const isHls = roomData?.movieUrl?.includes('.m3u8') || (roomData as any)?.playlistUrl?.includes('.m3u8');
+  
+  const streamUrl = isHls
+    ? roomData!.movieUrl! // HLS relies on direct URL for relative segment fetching
     : selectedAudio !== undefined 
     ? `${API_BASE_URL}/movies/${id}/stream?audioTrack=${selectedAudio}` 
     : `${API_BASE_URL}/movies/${id}/stream`;
