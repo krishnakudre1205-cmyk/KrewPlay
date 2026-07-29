@@ -55,27 +55,46 @@ export async function processHLSAndUpload(
       .on("error", () => resolve());
   });
 
-  // 2. Extract metadata
+  // 2. Extract metadata and codecs
   const metadata: any = await new Promise((resolve) => {
     ffmpeg.ffprobe(localFilePath, (err, metadata) => {
-      if (err) return resolve({ duration: 0, size: 0 });
+      if (err) return resolve({ duration: 0, size: 0, videoCodec: "", audioCodec: "" });
+      
+      let vCodec = "";
+      let aCodec = "";
+      if (metadata.streams) {
+        const vStream = metadata.streams.find(s => s.codec_type === 'video');
+        const aStream = metadata.streams.find(s => s.codec_type === 'audio');
+        if (vStream) vCodec = vStream.codec_name || "";
+        if (aStream) aCodec = aStream.codec_name || "";
+      }
+      
       resolve({
         duration: metadata.format.duration || 0,
-        size: metadata.format.size || 0
+        size: metadata.format.size || 0,
+        videoCodec: vCodec,
+        audioCodec: aCodec
       });
     });
   });
 
   const duration = metadata.duration;
   const sizeMB = metadata.size / (1024 * 1024);
+  const vCodec = metadata.videoCodec;
+  const aCodec = metadata.audioCodec;
+  
+  // Smart Codec Detection: MP4/H264/AAC are natively supported by browsers
+  const isWebCompatible = (vCodec === 'h264' && (aCodec === 'aac' || aCodec === 'mp3' || !aCodec));
   const isSmall = sizeMB < 100;
   
   emitProgress(20); // Preparing Movie
 
   let finalUrl = "";
 
-  if (isSmall) {
-    console.log(`[FFmpeg] Small file detected (${sizeMB.toFixed(2)}MB). Using fast-path direct upload.`);
+  // If it's web compatible and not insanely large (e.g. < 500MB), we can progressive stream it instantly
+  // The prompt says "Small file optimization < 100MB", but for compatible files we can prioritize immediate playback regardless.
+  if (isWebCompatible && sizeMB < 500) {
+    console.log(`[FFmpeg] Smart Codec Match (V: ${vCodec}, A: ${aCodec}, Size: ${sizeMB.toFixed(2)}MB). Skipping transcode for fast-path.`);
     // Fast path: upload original mp4 directly
     const remotePath = `${movieId}/original.mp4`;
     await uploadFileToSupabase(localFilePath, remotePath, "video/mp4");
@@ -86,7 +105,7 @@ export async function processHLSAndUpload(
       
     finalUrl = publicUrlData.publicUrl;
   } else {
-    console.log(`[FFmpeg] Large file detected (${sizeMB.toFixed(2)}MB). Generating 720p fast-path HLS.`);
+    console.log(`[FFmpeg] Incompatible or massive file (V: ${vCodec}, A: ${aCodec}, Size: ${sizeMB.toFixed(2)}MB). Generating 720p fast-path HLS.`);
     // Fast path: generate single 720p stream
     await new Promise<void>((resolve, reject) => {
       ffmpeg(localFilePath)

@@ -263,6 +263,11 @@ export default function Room() {
         hls = new Hls({
           startPosition: -1,
           capLevelToPlayerSize: true,
+          maxMaxBufferLength: 600, // Dynamic buffering: up to 10 mins on fast wifi
+          maxBufferSize: 60 * 1000 * 1000, // 60MB max cache
+          abrEwmaDefaultEstimate: 500000, // Conservative start for instant playback
+          abrEwmaFastLive: 3.0, // Quick adaptation
+          liveSyncDuration: 3, // Tight sync boundary
         });
         hls.loadSource(streamUrl);
         hls.attachMedia(videoRef.current);
@@ -932,18 +937,45 @@ export default function Room() {
       if (!videoRef.current) return;
       if (isSyncing.current) return;
       
-      isSyncing.current = true;
-      videoRef.current.playbackRate = player.playbackRate;
+      const isHost = participants.find(p => p.id === localStorage.getItem("participantId"))?.isHost;
+      if (isHost) return; // Host dictates time, doesn't listen to periodic state updates unless it's a hard sync
+      
+      // Strict ±100ms drift correction
+      // Calculate where the host's playhead should be *right now* based on network latency
+      const timeSinceUpdate = (Date.now() - player.lastUpdated) / 1000;
+      const expectedHostTime = player.isPlaying ? player.currentTime + timeSinceUpdate : player.currentTime;
+      const localTime = videoRef.current.currentTime;
+      const drift = expectedHostTime - localTime;
+
+      // ±100ms constraint
+      if (Math.abs(drift) > 0.1) {
+        if (Math.abs(drift) > 2) {
+          // Hard seek if drift is massive (network drop)
+          isSyncing.current = true;
+          videoRef.current.currentTime = expectedHostTime;
+          setTimeout(() => { isSyncing.current = false; }, 300);
+        } else {
+          // Soft playback rate adjustment to catch up or wait
+          const correctionRate = drift > 0 ? 1.05 : 0.95;
+          videoRef.current.playbackRate = player.playbackRate * correctionRate;
+        }
+      } else {
+        // In sync, restore normal speed
+        videoRef.current.playbackRate = player.playbackRate;
+      }
+
       setSpeed(player.playbackRate);
 
       if (player.isPlaying && videoRef.current.paused) {
+        isSyncing.current = true;
         videoRef.current.play().catch(() => {});
+        setTimeout(() => { isSyncing.current = false; }, 150);
       }
       if (!player.isPlaying && !videoRef.current.paused) {
+        isSyncing.current = true;
         videoRef.current.pause();
+        setTimeout(() => { isSyncing.current = false; }, 150);
       }
-      
-      setTimeout(() => { isSyncing.current = false; }, 150);
     }
 
     const handleMovieChanged = () => {
@@ -1133,6 +1165,21 @@ export default function Room() {
                     const currentTime = e.currentTarget.currentTime;
                     if (Math.floor(currentTime) % 10 === 0) {
                       saveProgress(currentTime);
+                    }
+                    
+                    // Host emits periodic state for ±100ms strict sync
+                    const participantId = localStorage.getItem("participantId");
+                    const me = participants.find((p) => p.id === participantId);
+                    if (me?.isHost && Math.floor(currentTime * 10) % 20 === 0) { // Every ~2 seconds
+                      socket.emit("player-state", {
+                        roomCode: id,
+                        player: {
+                          isPlaying: !e.currentTarget.paused,
+                          currentTime: currentTime,
+                          playbackRate: e.currentTarget.playbackRate,
+                          lastUpdated: Date.now()
+                        }
+                      });
                     }
                   }}
                 >
