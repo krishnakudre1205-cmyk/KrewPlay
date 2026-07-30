@@ -126,7 +126,7 @@ export async function streamMovieController(req: Request, res: Response) {
       if (responseHeaders['content-type']) res.setHeader('Content-Type', responseHeaders['content-type'] as string);
       if (responseHeaders['content-length']) res.setHeader('Content-Length', responseHeaders['content-length'] as string);
       if (responseHeaders['content-range']) res.setHeader('Content-Range', responseHeaders['content-range'] as string);
-      if (responseHeaders['accept-ranges']) res.setHeader('Accept-Ranges', responseHeaders['accept-ranges'] as string);
+      res.setHeader('Accept-Ranges', 'bytes');
 
       res.status(response.status);
       response.data.pipe(res);
@@ -152,14 +152,28 @@ export async function streamMovieController(req: Request, res: Response) {
       res.writeHead(200, {
         "Content-Length": fileSize,
         "Content-Type": mimeType,
+        "Accept-Ranges": "bytes",
       });
 
       fs.createReadStream(moviePath).pipe(res);
       return;
     }
 
-    const start = Number(range.replace(/\D/g, ""));
-    const end = Math.min(start + 1024 * 1024, fileSize - 1);
+    const parts = range.replace(/bytes=/, "").split("-");
+    const partialstart = parts[0];
+    const partialend = parts[1];
+
+    const start = parseInt(partialstart, 10);
+    const end = partialend ? parseInt(partialend, 10) : fileSize - 1;
+
+    if (isNaN(start) || isNaN(end) || start >= fileSize || end >= fileSize || start > end) {
+      res.writeHead(416, {
+        "Content-Range": `bytes */${fileSize}`,
+        "Accept-Ranges": "bytes",
+      });
+      res.end();
+      return;
+    }
 
     res.writeHead(206, {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
@@ -256,11 +270,12 @@ export async function selectLibraryMovieController(req: Request, res: Response) 
   room.movieName = record.movieName;
   room.movieSize = record.size;
   room.mimeType = record.mimeType;
-  room.movieUrl = record.playlistUrl; // Overload movieUrl with playlistUrl for now or use dedicated field
+
+  const isHls = record.playlistUrl?.includes(".m3u8");
+  room.playlistUrl = isHls ? record.playlistUrl : undefined;
+  room.movieUrl = isHls ? undefined : record.playlistUrl;
   
-  // Custom fields for Supabase HLS
-  (room as any).playlistUrl = record.playlistUrl;
-  (room as any).thumbnailUrl = record.thumbnailUrl;
+  room.thumbnailUrl = record.thumbnailUrl;
   room.duration = record.duration;
 
   room.audioTracks = record.audioTracks || [];

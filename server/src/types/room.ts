@@ -25,11 +25,13 @@ export interface Room {
   // Movie
   moviePath?: string;
   movieUrl?: string;
+  playlistUrl?: string;
   movieName?: string;
   movieSize?: number;
   mimeType?: string;
   duration?: number;
   thumbnail?: string;
+  thumbnailUrl?: string;
 
   // Participants
   participants: Participant[];

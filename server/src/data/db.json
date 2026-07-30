@@ -122,7 +122,33 @@
   ],
   "library": [
     {
-      "id": "3944d90b-ef99-435a-9927-6d8228ed2dc5",
+      "id": "017d81cc-306b-4ea4-a690-fcbe01534778",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "2bd794cb-63da-4d25-9c47-7ba7be49118b",
+      "originalFilename": "2bd794cb-63da-4d25-9c47-7ba7be49118b.mkv",
+      "size": 344182370,
+      "mimeType": "video/mkv",
+      "moviePath": "C:\\Users\\Krishna\\OneDrive\\Desktop\\KrewPlay\\server\\storage\\movies\\fb116140-cc1a-46c2-981c-1719ffbb2a72\\2bd794cb-63da-4d25-9c47-7ba7be49118b.mkv",
+      "audioTracks": [],
+      "subtitleTracks": [],
+      "uploadedAt": "2026-07-29T18:33:17.103Z",
+      "ignored": false
+    },
+    {
+      "id": "b552e751-3608-44d0-825b-afef238050dd",
+      "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
+      "movieName": "3ed06a1d-83fd-427e-b83e-6b670dedc89b",
+      "originalFilename": "3ed06a1d-83fd-427e-b83e-6b670dedc89b.mp4",
+      "size": 47726235,
+      "mimeType": "video/mp4",
+      "moviePath": "C:\\Users\\Krishna\\OneDrive\\Desktop\\KrewPlay\\server\\storage\\movies\\fb116140-cc1a-46c2-981c-1719ffbb2a72\\3ed06a1d-83fd-427e-b83e-6b670dedc89b.mp4",
+      "audioTracks": [],
+      "subtitleTracks": [],
+      "uploadedAt": "2026-07-29T18:33:17.107Z",
+      "ignored": false
+    },
+    {
+      "id": "e72b52e5-10d2-4fdb-9c90-1d528283876b",
       "userId": "fb116140-cc1a-46c2-981c-1719ffbb2a72",
       "movieName": "video_20260729_122428",
       "originalFilename": "video_20260729_122428.mp4",
@@ -131,7 +157,7 @@
       "moviePath": "",
       "audioTracks": [],
       "subtitleTracks": [],
-      "uploadedAt": "2026-07-29T18:06:01.396Z",
+      "uploadedAt": "2026-07-29T18:33:41.372Z",
       "ignored": false,
       "hash": "b8678e7c1032608138dc385b154c2138f13f99c02b3aa91cbd1329acebd2b430",
       "status": "processing",
